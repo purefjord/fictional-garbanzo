@@ -191,55 +191,35 @@
        * @returns {number|null} The index of a valid spawn hex, or null if none found.
        */
       function findValidPlayerSpawnLocation() {
-    addToLog("findValidPlayerSpawnLocation: Starting search.", "System"); // New log
-
-    const potentialSpawns = [];
-    for (let i = 0; i < hexes.length; i++) {
-        const h = hexes[i];
-        if (h &&
-            h.terrain !== TerrainType.OCEAN &&
-            h.terrain !== TerrainType.MOUNTAINS
-        ) {
-            // Check if AI ship is already at this location
-            const isOccupiedByAI = gameState.aiShips.some(s => s.q === h.q && s.r === h.r);
-            if (!isOccupiedByAI) {
-                potentialSpawns.push(i);
+        const potentialSpawns = [];
+        for (let i = 0; i < hexes.length; i++) {
+            const h = hexes[i];
+            if (h &&
+                h.terrain !== TerrainType.OCEAN &&
+                h.terrain !== TerrainType.MOUNTAINS
+            ) {
+                // Check if AI ship is already at this location
+                const isOccupiedByAI = gameState.aiShips.some(s => s.q === h.q && s.r === h.r);
+                if (!isOccupiedByAI) {
+                    potentialSpawns.push(i);
+                }
             }
         }
-    }
 
-    addToLog(`findValidPlayerSpawnLocation: Found ${potentialSpawns.length} potential primary spawns.`, "System"); // New log
-
-    if (potentialSpawns.length > 0) {
-        const selectedSpawn = random(potentialSpawns); // Pick a random valid one
-        addToLog(`findValidPlayerSpawnLocation: Selected primary spawn index ${selectedSpawn}.`, "System"); // New log
-        return selectedSpawn;
-    }
-
-    // Fallback: if no "ideal" (non-AI occupied land) spot, try any land spot.
-    addToLog("findValidPlayerSpawnLocation: No primary spawns found. Trying fallback (any non-ocean/non-mountain land).", "System"); // New log
-    const fallbackSpawns = []; // New variable for fallback
-    for (let i = 0; i < hexes.length; i++) {
-        const h = hexes[i];
-        if (h && h.terrain !== TerrainType.OCEAN && h.terrain !== TerrainType.MOUNTAINS) {
-            // In fallback, we might consider locations even if an AI is there,
-            // though ideally AI spawns on ocean. If player MUST spawn, this is a last resort.
-            // For now, let's keep the original logic of just finding any land.
-            fallbackSpawns.push(i);
+        if (potentialSpawns.length > 0) {
+            return random(potentialSpawns); // Pick a random valid one
         }
-    }
 
-    addToLog(`findValidPlayerSpawnLocation: Found ${fallbackSpawns.length} fallback spawn candidates.`, "System"); // New log
-
-    if (fallbackSpawns.length > 0) {
-        const selectedFallback = random(fallbackSpawns);
-        addToLog(`findValidPlayerSpawnLocation: Selected fallback spawn index ${selectedFallback}.`, "System"); // New log
-        return selectedFallback;
-    }
-    
-    addToLog("findValidPlayerSpawnLocation: No suitable spawn location found after all checks.", "System"); // New log
-    return null; // Should ideally not happen on a typical map
-}
+        // Fallback: if no "ideal" (non-AI occupied land) spot, try any land spot.
+        // This scenario is less likely if AI spawns on ocean as intended.
+        for (let i = 0; i < hexes.length; i++) {
+            const h = hexes[i];
+            if (h && h.terrain !== TerrainType.OCEAN && h.terrain !== TerrainType.MOUNTAINS) {
+                return i;
+            }
+        }
+        return null; // Should ideally not happen on a typical map
+      }
 
       /**
        * Automatically spawns the player ship at a valid location.
@@ -272,19 +252,24 @@
             status: {}
         };
 
-        // Recalculate hex positions to center the player ship
+        // (This code assumes gameState.playerShip is already defined and has q, r properties)
         const playerQ = gameState.playerShip.q;
         const playerR = gameState.playerShip.r;
+
+        // Calculate the player ship's base pixel position (relative to a 0,0 grid origin)
         const playerBasePixelPos = axialToPixel(playerQ, playerR);
+
+        // Calculate the new global X and Y offsets required to center this position on the screen
         const newGlobalOffsetX = width / 2 - playerBasePixelPos.x;
         const newGlobalOffsetY = height / 2 - playerBasePixelPos.y;
 
+        // Iterate through all hexes and update their screen coordinates
         for (const h of hexes) {
-            if (h) { // Ensure h is not null if the array can have gaps
-                const hexBasePixelPos = axialToPixel(h.q, h.r);
-                h.x = hexBasePixelPos.x + newGlobalOffsetX;
-                h.y = hexBasePixelPos.y + newGlobalOffsetY;
-            }
+            // Get each hex's base pixel position (relative to a 0,0 grid origin)
+            const hexBasePixelPos = axialToPixel(h.q, h.r);
+            // Apply the new global offsets
+            h.x = hexBasePixelPos.x + newGlobalOffsetX;
+            h.y = hexBasePixelPos.y + newGlobalOffsetY;
         }
 
         addToLog(`Your ship [${shipId}] embarked at (${gameState.playerShip.q}, ${gameState.playerShip.r}) on ${getTerrainName(spawnHex.terrain)}.`);
