@@ -159,10 +159,65 @@
       function computeReachable(startQ, startR, mpLeft) { const startIdx = axialToIndex(startQ, startR); if (startIdx === null || mpLeft <= 0) return new Set(); const frontier = [{ idx: startIdx, cost: 0 }]; const visited = new Map(); visited.set(startIdx, 0); const reachable = new Set(); let head = 0; while(head < frontier.length) { const current = frontier[head++]; const currentCoords = indexToAxial(current.idx); if (!currentCoords) continue; const neighbors = axialNeighbors(currentCoords.q, currentCoords.r); for (const neighborCoords of neighbors) { const neighborIdx = axialToIndex(neighborCoords.q, neighborCoords.r); if (neighborIdx === null || !hexes[neighborIdx]) continue; const moveCost = MOVE_COST[hexes[neighborIdx].terrain] ?? CONSTS.DEFAULT_MOVE_COST; if (moveCost >= 999) continue; const newCost = current.cost + moveCost; if (newCost <= mpLeft) { if (!visited.has(neighborIdx) || newCost < visited.get(neighborIdx)) { visited.set(neighborIdx, newCost); frontier.push({ idx: neighborIdx, cost: newCost }); reachable.add(neighborIdx); } } } } return reachable; }
       function* spiral(q0, r0, radius) { for (let dq = -radius; dq <= radius; dq++) { for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++) { const q = q0 + dq; const r = r0 + dr; const idx = axialToIndex(q, r); if (idx !== null && hexes[idx]) { yield idx; } } } }
       function updateVisibility() { hexes.forEach(h => { if(h) h.isVisible = false; }); if (!gameState.playerShip) { visibleReachableSet.clear(); return; } const shipQ = gameState.playerShip.q; const shipR = gameState.playerShip.r; for (const idx of spiral(shipQ, shipR, CONSTS.LOS_RADIUS)) { if (hexes[idx]) { hexes[idx].isVisible = true; hexes[idx].isExplored = true; } } hexes.forEach(h => { if(h && h.colony && h.colony.faction === CONSTS.FACTION_PLAYER){ for (const idx of spiral(h.q, h.r, 1)) { if (hexes[idx]) { hexes[idx].isVisible = true; hexes[idx].isExplored = true; } } } }); visibleReachableSet.clear(); reachableSet.forEach(idx => { if (hexes[idx]?.isVisible) { visibleReachableSet.add(idx); } }); }
-      function drawHex(cx, cy) { beginShape(); for (let i = 0; i < 6; i++) { const a = PI / 3 * i; vertex(cx + CONSTS.HEX_SIZE * cos(a), cy + CONSTS.HEX_SIZE * sin(a)); } endShape(CLOSE); }
-      function pointInHex(px, py, h) { if (!h) return false; return dist(px, py, h.x, h.y) <= CONSTS.HEX_SIZE; }
+      
+      // drawHex now expects fill1 and optionally fill2 to be p5.Color objects.
+      // Stroke is handled by the caller (drawHexGrid) after this function.
+      function drawHex(cx, cy, fill1, fill2 = null) {
+        const hexSize = CONSTS.HEX_SIZE;
+        // Flat-topped hex vertices
+        const points = [];
+        for (let i = 0; i < 6; i++) {
+          const angle = PI / 3 * i + PI / 6; // Add PI/6 for flat top
+          points.push({ x: cx + hexSize * cos(angle), y: cy + hexSize * sin(angle) });
+        }
+
+        if (fill2) { // Two-tone vertical "gradient"
+          push();
+          noStroke(); // Strokes will be applied by drawHexGrid
+
+          // Top half (lighter color - fill1)
+          // Vertices: 0 (top-right), 1 (right-middle), 2 (bottom-right), 
+          // then approx mid-bottom, mid-top, 5 (top-left)
+          fill(fill1);
+          beginShape();
+          vertex(points[5].x, points[5].y); // Top-left
+          vertex(points[0].x, points[0].y); // Top-right
+          vertex(points[1].x, cy);       // Right-middle (approx horizontal center)
+          vertex(points[4].x, cy);       // Left-middle (approx horizontal center)
+          endShape(CLOSE);
+
+          // Bottom half (darker color - fill2)
+          fill(fill2);
+          beginShape();
+          vertex(points[4].x, cy);       // Left-middle
+          vertex(points[1].x, cy);       // Right-middle
+          vertex(points[2].x, points[2].y); // Bottom-right
+          vertex(points[3].x, points[3].y); // Bottom-left
+          endShape(CLOSE);
+          pop();
+        } else { // Original solid fill
+          fill(fill1); // fill1 is already a p5.Color object
+          // noStroke(); // Caller (drawHexGrid) will handle stroke
+          beginShape();
+          for (let i = 0; i < 6; i++) {
+            vertex(points[i].x, points[i].y);
+          }
+          endShape(CLOSE);
+        }
+      }
+
+      function pointInHex(px, py, h) { 
+        // Approximate check, good enough for mouse interaction with flat-topped hexes
+        if (!h) return false; 
+        return dist(px, py, h.x, h.y) < CONSTS.HEX_SIZE * 0.866; // HEX_SIZE * SQRT3/2 is the apothem (dist from center to flat side)
+      }
       function getHexUnderMouse() { if (gameState.combat) return null; for (let i = 0; i < hexes.length; i++) { if (hexes[i]?.isVisible && pointInHex(mouseX, mouseY, hexes[i])) { return i; } } return null; }
       function clampMenuToScreen() { if (menuX + CONSTS.MENU_WIDTH > width) menuX = width - CONSTS.MENU_WIDTH; if (menuY + actions.length * CONSTS.MENU_ITEM_HEIGHT > height) menuY = height - actions.length * CONSTS.MENU_ITEM_HEIGHT; if (menuX < 0) menuX = 0; if (menuY < 0) menuY = 0; }
+      function darkenColor(p5ColorInput, percent) {
+        const baseC = (typeof p5ColorInput === 'string') ? color(p5ColorInput) : p5ColorInput;
+        const amount = percent / 100;
+        return lerpColor(baseC, color(0), amount); // Lerp towards black
+      }
 
       const EVENT_POOL = [ { id: 'storm', name: 'Sudden Storm', type: 'Instant', weight: 3, desc: "Dark clouds gather rapidly, spawning a treacherous storm nearby.", effectFn: (ship) => { const hazard = spawnStormNear(ship); if (hazard) { gameState.activeHazards.push(hazard); addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: A storm brews at (${hexes[hazard.idx].q}, ${hexes[hazard.idx].r})!`, "Event"); } else { addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Storm clouds gathered but found no open sea nearby.`, "Event"); } } }, { id: 'merchant', name: 'Travelling Merchant', type: 'Choice', weight: 2, desc: "A merchant vessel hails you, offering 3 Wheat for 6 Gold.", options: ['Buy (6G)', 'Ignore'], effectFn: (ship, choice) => { if (choice === 'Buy (6G)') { const cost = 6; const amount = 3; const currentCargo = ship.cargo[CONSTS.RESOURCE_WHEAT]; const spaceAvailable = CONSTS.SHIP_MAX_CARGO - currentCargo; if (ship.cargo[CONSTS.RESOURCE_GOLD] >= cost && spaceAvailable > 0) { const canTake = Math.min(amount, spaceAvailable); ship.cargo[CONSTS.RESOURCE_GOLD] -= cost; ship.cargo[CONSTS.RESOURCE_WHEAT] += canTake; addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Bought ${canTake} ${CONSTS.RESOURCE_WHEAT} for ${cost}G. (Space: ${spaceAvailable})`, "Event"); } else if (ship.cargo[CONSTS.RESOURCE_GOLD] < cost) { addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Cannot afford the merchant's offer (Need 6G).`, "Event"); } else { addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: No space for the merchant's wheat.`, "Event"); } } else { addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Passed on the merchant's deal.`, "Event"); } } }, { id: 'favorable_winds', name: 'Favorable Winds', type: 'Instant', weight: 4, desc: "Strong tailwinds promise swift travel next turn.", effectFn: (ship) => { if (!ship.status) ship.status = {}; ship.status.windBoost = (ship.status.windBoost || 0) + 1; addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Caught favorable winds! (+1 MP next turn).`, "Event"); } }, { id: 'lost_scouts', name: 'Lost Scouts', type: 'Instant', weight: 2, desc: "A scouting party failed to return, but salvaged some timber.", effectFn: (ship) => { const crewLoss = Math.min(2, ship.crew); const woodGain = 1; const spaceAvailable = CONSTS.SHIP_MAX_CARGO - ship.cargo[CONSTS.RESOURCE_WOOD]; const actualWoodGain = Math.min(woodGain, spaceAvailable); ship.crew -= crewLoss; ship.cargo[CONSTS.RESOURCE_WOOD] += actualWoodGain; addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Lost ${crewLoss} crew, gained ${actualWoodGain} ${CONSTS.RESOURCE_WOOD}.`, "Event"); if (ship.crew <= 0) { addToLog(`   Ship ${ship.id} has no crew left!`, "System"); } } }, { id: 'plague_rats', name: 'Plague Rats', type: 'Instant', weight: 1, desc: "Rats infest the ship! Sickness spreads among the crew.", effectFn: (ship) => { if (!ship.status) ship.status = {}; ship.status.crewSick = 3; addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Crew struck by sickness! (-1 MP while sick).`, "Event"); } }, ];
 
@@ -269,10 +324,287 @@
       function draw() { if (gameState.combat) { drawCombat(); } else { background(CONSTS.UNEXPLORED_COLOUR); drawHexGrid(); drawHazards(); drawShips(); if (hoverIdx !== null && reachableSet.has(hoverIdx) && gameState.playerShip && !isEventModalOpen) { const startIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r); currentPathPreview = aStar(startIdx, hoverIdx, MOVE_COST); if (currentPathPreview) { drawPlannedPathPreview(currentPathPreview.path); } } else { currentPathPreview = null; } drawUI(); if (menuOpen && !isEventModalOpen) drawMenu(); } select('#endTurnBtn').elt.disabled = gameState.combat || !gameState.playerShip || gameState.playerOrderQueue.length === 0 || isEventModalOpen; if (!isEventModalOpen && !gameState.combat) updateTooltip(); else tooltipElement.hide(); }
 
       /* ===== RENDERING (Strategy Map) ===== */
-      function drawHexGrid() { if (!isEventModalOpen) hoverIdx = getHexUnderMouse(); else hoverIdx = null; hexes.forEach((h, idx) => { if (!h) return; if (!h.isExplored) { fill("#1a1a20"); noStroke(); drawHex(h.x, h.y); return; } const terrainStyle = TERRAIN_COLOURS[h.terrain]; if (!terrainStyle) { fill("#ff00ff"); stroke("#000"); } else { fill(terrainStyle.fill); stroke(terrainStyle.stroke); } strokeWeight(1); drawHex(h.x, h.y); if (h.colony) { push(); translate(h.x, h.y); fill(CONSTS.COLONY_COLOUR); noStroke(); rect(-6, -6, 12, 12); const flagPoleColor = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.AI_COLOUR : CONSTS.PLAYER_COLOUR; const flagColor = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.AI_FLAG_COLOUR : CONSTS.PLAYER_FLAG_COLOUR; stroke(flagPoleColor); strokeWeight(1.5); line(0, -6, 0, -14); fill(flagColor); noStroke(); triangle(0, -14, 8, -11, 0, -8); pop(); } if (h.market) { push(); fill(CONSTS.MARKET_COLOUR); noStroke(); ellipse(h.x + CONSTS.HEX_SIZE * 0.3, h.y + CONSTS.HEX_SIZE * 0.4, 10, 10); pop(); } if (!h.isVisible) { fill(0, 0, 0, CONSTS.FOG_ALPHA_PERCENT * 255); noStroke(); drawHex(h.x, h.y); return; } if (!isEventModalOpen) { noStroke(); if (visibleReachableSet.has(idx)) { fill(CONSTS.RANGE_COLOUR); drawHex(h.x, h.y); } if (idx === hoverIdx) { fill(CONSTS.HIGHLIGHT_COLOUR); drawHex(h.x, h.y); } } }); }
-      function drawHazards() { gameState.activeHazards.forEach(hazard => { const h = hexes[hazard.idx]; if (h && h.isVisible) { push(); translate(h.x, h.y); const hazardColor = CONSTS.HAZARD_COLOURS[hazard.kind] || '#ffffff'; fill(hazardColor); noStroke(); const size = CONSTS.HAZARD_ICON_SIZE; if (hazard.kind === 'Storm') { ellipse(0, 0, size * 1.2, size * 0.8); ellipse(-size * 0.3, -size * 0.2, size * 0.8, size * 0.6); ellipse(size * 0.3, size * 0.2, size * 0.8, size * 0.6); } else if (hazard.kind === 'Reef') { stroke(hazardColor); strokeWeight(2); line(-size / 2, -size / 2, size / 2, size / 2); line(-size / 2, size / 2, size / 2, -size / 2); } else if (hazard.kind === 'Pirates') { fill(hazardColor); ellipse(0, -size*0.2, size*0.8, size*0.8); rect(-size*0.4, size*0.2, size*0.8, size*0.3); fill('#111'); ellipse(-size*0.2, -size*0.2, size*0.2, size*0.2); ellipse(size*0.2, -size*0.2, size*0.2, size*0.2); } pop(); } }); }
+      function drawHexGrid() {
+        if (!isEventModalOpen) hoverIdx = getHexUnderMouse();
+        else hoverIdx = null;
+
+        hexes.forEach((h, idx) => {
+          if (!h) return;
+
+          strokeWeight(1); // Default stroke weight
+
+          if (!h.isExplored) {
+            const unexploredColor = color(CONSTS.UNEXPLORED_COLOUR);
+            noStroke(); // No stroke for unexplored hexes
+            drawHex(h.x, h.y, unexploredColor);
+            return;
+          }
+
+          const terrainStyle = TERRAIN_COLOURS[h.terrain];
+          let baseFill = terrainStyle ? color(terrainStyle.fill) : color("#ff00ff"); // Default to magenta if style undefined
+          let baseStroke = terrainStyle ? color(terrainStyle.stroke) : color("#000000"); // Default to black
+
+          // Optional: Vary Plains/Hills brightness
+          if (h.terrain === TerrainType.PLAINS || h.terrain === TerrainType.HILLS) {
+            if ((h.q + h.r) % 2 === 0) {
+              // baseFill = darkenColor(baseFill, 5); // Subtle darken
+            }
+          }
+
+          if (h.terrain === TerrainType.OCEAN || h.terrain === TerrainType.COAST) {
+            const darkerFill = darkenColor(baseFill, 15); // Darken by 15% for bottom part
+            drawHex(h.x, h.y, baseFill, darkerFill); // This function now handles fill
+            stroke(baseStroke); // Apply stroke after fill parts are drawn
+            // Draw the outline again to ensure it's on top of gradient parts
+            noFill();
+            beginShape();
+            for (let i = 0; i < 6; i++) {
+                const angle = PI / 3 * i + PI/6; // Flat-topped
+                vertex(h.x + CONSTS.HEX_SIZE * cos(angle), h.y + CONSTS.HEX_SIZE * sin(angle));
+            }
+            endShape(CLOSE);
+          } else {
+            // For non-gradient terrains, drawHex handles the fill
+            // Stroke is set before calling drawHex for these
+            stroke(baseStroke);
+            drawHex(h.x, h.y, baseFill);
+          }
+          
+          // Forest procedural texture
+          if (h.terrain === TerrainType.FOREST) {
+            push();
+            translate(h.x, h.y);
+            const darkerForestFill = darkenColor(baseFill, 30); // Darker green for "trees"
+            fill(darkerForestFill);
+            noStroke();
+            for (let i = 0; i < random(3, 6); i++) { 
+              const treeX = random(-CONSTS.HEX_SIZE * 0.5, CONSTS.HEX_SIZE * 0.5);
+              const treeY = random(-CONSTS.HEX_SIZE * 0.5, CONSTS.HEX_SIZE * 0.5);
+              if (dist(0,0, treeX, treeY) < CONSTS.HEX_SIZE * 0.6) { // Keep trees within hex
+                 ellipse(treeX, treeY, random(CONSTS.HEX_SIZE*0.12, CONSTS.HEX_SIZE*0.22), random(CONSTS.HEX_SIZE*0.12, CONSTS.HEX_SIZE*0.22));
+              }
+            }
+            pop();
+          }
+
+          // Draw colony and market icons on top of terrain
+          if (h.colony) {
+            push();
+            translate(h.x, h.y); // Center of the hex
+
+            const houseBaseWidth = 12;
+            const houseBaseHeight = 8;
+            const roofHeight = 7;
+            const houseRoofColor = color(180, 80, 80); // A reddish-brown for the roof
+            const houseStrokeColor = color(40);    // Darker stroke for definition
+
+            // House Base (rectangle) - position it so its bottom is slightly above y=0 of the hex center
+            // to leave space for potential flag below or to keep it centered.
+            // Let's make the house visually centered around y=0 or slightly above.
+            // Base top will be at -houseBaseHeight, base bottom at 0.
+            const baseTopY = -houseBaseHeight;
+            const baseBottomY = 0;
+            
+            fill(CONSTS.COLONY_COLOUR); // White or light color for base
+            stroke(houseStrokeColor);
+            strokeWeight(1);
+            rectMode(CORNERS); // Use CORNERS for base rect
+            rect(-houseBaseWidth / 2, baseTopY, houseBaseWidth / 2, baseBottomY);
+
+            // Roof (triangle)
+            fill(houseRoofColor);
+            // stroke(houseStrokeColor); // Optional: stroke for roof
+            // strokeWeight(1);
+            noStroke(); // Cleaner roof without stroke
+            triangle(
+              -houseBaseWidth / 2, baseTopY, // Top-left of base
+               houseBaseWidth / 2, baseTopY, // Top-right of base
+               0, baseTopY - roofHeight      // Peak of roof
+            );
+            
+            // Flag
+            const flagPoleColor = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.AI_COLOUR : CONSTS.PLAYER_COLOUR;
+            const flagColor = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.AI_FLAG_COLOUR : CONSTS.PLAYER_FLAG_COLOUR;
+            
+            const flagPoleLength = 10;
+            const flagWidth = 7;
+            const flagHeight = 5;
+
+            // Position flag to the side of the roof
+            const flagPoleX = houseBaseWidth / 2 + 2; 
+            const flagPoleY = baseTopY - roofHeight / 2; // Mid-height of the roof
+
+            stroke(flagPoleColor);
+            strokeWeight(1.5);
+            line(flagPoleX, flagPoleY, flagPoleX, flagPoleY - flagPoleLength);
+            
+            fill(flagColor);
+            noStroke();
+            triangle(
+              flagPoleX, flagPoleY - flagPoleLength,         // Top of flagpole
+              flagPoleX + flagWidth, flagPoleY - flagPoleLength + flagHeight / 2, // Outer point
+              flagPoleX, flagPoleY - flagPoleLength + flagHeight   // Bottom of flag against pole
+            );
+            pop();
+          }
+
+          if (h.market) {
+            push();
+            translate(h.x, h.y);
+            fill(CONSTS.MARKET_COLOUR);
+            noStroke();
+            ellipse(CONSTS.HEX_SIZE * 0.35, CONSTS.HEX_SIZE * 0.35, 10, 10); // Positioned towards a corner
+            pop();
+          }
+
+          // Fog of War and Highlights
+          if (!h.isVisible) {
+            const fogColor = color(0, 0, 0, CONSTS.FOG_ALPHA_PERCENT * 255);
+            noStroke(); // No stroke for fog overlay
+            drawHex(h.x, h.y, fogColor);
+            return; // Return after drawing fog if not visible
+          }
+
+          if (!isEventModalOpen) {
+            noStroke(); // No stroke for highlight overlays
+            if (visibleReachableSet.has(idx)) {
+              drawHex(h.x, h.y, color(CONSTS.RANGE_COLOUR));
+            }
+            if (idx === hoverIdx) {
+              drawHex(h.x, h.y, color(CONSTS.HIGHLIGHT_COLOUR));
+            }
+          }
+        });
+      }
+      function drawHazards() {
+        gameState.activeHazards.forEach(hazard => {
+          const h = hexes[hazard.idx];
+          if (h && h.isVisible) {
+            push();
+            translate(h.x, h.y);
+            const hazardColor = color(CONSTS.HAZARD_COLOURS[hazard.kind] || '#ffffff'); // Ensure p5.Color
+            const size = CONSTS.HAZARD_ICON_SIZE; // Approx 12
+
+            if (hazard.kind === 'Storm') {
+              fill(hazardColor);
+              noStroke();
+              // Swirling cloud shape using curveVertex
+              // Points are defined to create a sort of spiral/turbulent cloud
+              // The first and last points are control points for curveVertex
+              beginShape();
+              curveVertex(size * 0.7, -size * 0.7); // Control point
+              curveVertex(size * 0.5, -size * 0.5); // Start actual shape
+              curveVertex(0, -size * 0.8);
+              curveVertex(-size * 0.6, -size * 0.4);
+              curveVertex(-size * 0.3, size * 0.1);
+              curveVertex(size * 0.2, size * 0.6);
+              curveVertex(size * 0.7, size * 0.2);
+              curveVertex(size * 0.5, -size * 0.5); // End actual shape
+              curveVertex(0, -size * 0.8);          // Control point to close loop smoothly
+              endShape(CLOSE);
+
+            } else if (hazard.kind === 'Reef') {
+              fill(hazardColor); // Use the defined Reef color
+              noStroke(); // Or a very dark stroke: stroke(darkenColor(hazardColor, 40)); strokeWeight(0.5);
+              
+              // Draw 3 small irregular triangles (rocks)
+              // Rock 1
+              triangle(
+                -size * 0.4, size * 0.3,  // Bottom-left
+                 size * 0.1, size * 0.4,  // Bottom-right
+                -size * 0.1, -size * 0.5  // Top-ish
+              );
+              // Rock 2
+              triangle(
+                 size * 0.0, size * 0.1,  // Bottom-left
+                 size * 0.5, size * 0.2,  // Bottom-right
+                 size * 0.3, -size * 0.3  // Top-ish
+              );
+              // Rock 3 - smaller
+              triangle(
+                -size * 0.3, -size * 0.1, // Left
+                 size * 0.2, -size * 0.05, // Right
+                -size * 0.0,  size * 0.5  // Bottom-peak
+              );
+
+            } else if (hazard.kind === 'Pirates') {
+              // Pirate icon remains the same
+              fill(hazardColor);
+              ellipse(0, -size*0.2, size*0.8, size*0.8); // Head
+              rect(-size*0.4, size*0.2, size*0.8, size*0.3); // Bandana part
+              fill('#111'); // Black for eyes
+              ellipse(-size*0.2, -size*0.2, size*0.2, size*0.2);
+              ellipse(size*0.2, -size*0.2, size*0.2, size*0.2);
+            }
+            pop();
+          }
+        });
+      }
       function drawShips() { if (gameState.playerShip) { const shipIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r); if (shipIdx !== null && hexes[shipIdx]?.isVisible) { drawOneShip(hexes[shipIdx], gameState.playerShip); } } gameState.aiShips.forEach(aiShip => { const shipIdx = axialToIndex(aiShip.q, aiShip.r); if (shipIdx !== null && hexes[shipIdx]?.isVisible) { drawOneShip(hexes[shipIdx], aiShip); } }); }
-      function drawOneShip(shipHex, shipData) { if (!shipHex || !shipData) return; const shipColor = shipData.faction === CONSTS.FACTION_AI ? CONSTS.AI_COLOUR : CONSTS.PLAYER_COLOUR; const shipRadius = CONSTS.HEX_SIZE * CONSTS.SHIP_RADIUS_FACTOR; push(); translate(shipHex.x, shipHex.y); fill(shipColor); stroke("#222"); strokeWeight(1.5); triangle(0, -shipRadius*0.8, shipRadius*0.6, shipRadius*0.4, -shipRadius*0.6, shipRadius*0.4); if (shipData.status && shipData.status.crewSick > 0) { fill(CONSTS.HAZARD_COLOURS.Reef); noStroke(); ellipse(shipRadius * 0.5, -shipRadius * 0.6, 6, 6); } pop(); }
+      
+      function drawOneShip(shipHex, shipData) {
+        if (!shipHex || !shipData) return;
+        const shipColor = color(shipData.faction === CONSTS.FACTION_AI ? CONSTS.AI_COLOUR : CONSTS.PLAYER_COLOUR);
+        const shipRadius = CONSTS.HEX_SIZE * CONSTS.SHIP_RADIUS_FACTOR; // Approx 19.2
+
+        push();
+        translate(shipHex.x, shipHex.y);
+
+        // Define dimensions relative to shipRadius
+        const hullHeight = shipRadius * 0.6; // e.g., 11.5
+        const hullDeckWidth = shipRadius * 1.0; // e.g., 19.2
+        const hullKeelWidth = shipRadius * 0.7; // e.g., 13.4
+        const mastHeight = shipRadius * 1.1;  // e.g., 21
+        const mastWidth = shipRadius * 0.12; // e.g., 2.3
+        const sailWidth = shipRadius * 0.7;  // e.g., 13.4
+        const sailHeight = shipRadius * 0.9; // e.g., 17.3
+
+        // Hull (Trapezoid) - centered horizontally, base sits at y=0
+        // y coordinates are relative to the center of the hull itself, then shifted.
+        const hullBaseY = shipRadius * 0.1; // Shift hull slightly down so mast isn't too high
+
+        fill(shipColor);
+        stroke("#222");
+        strokeWeight(1.5);
+        quad(
+          -hullDeckWidth / 2, hullBaseY - hullHeight / 2, // Top-left
+           hullDeckWidth / 2, hullBaseY - hullHeight / 2, // Top-right
+           hullKeelWidth / 2, hullBaseY + hullHeight / 2, // Bottom-right
+          -hullKeelWidth / 2, hullBaseY + hullHeight / 2  // Bottom-left
+        );
+
+        // Mast
+        const mastColor = color(160, 120, 80); // Brownish
+        fill(mastColor);
+        noStroke();
+        // Mast base is at the center of the deck (y = hullBaseY - hullHeight / 2)
+        rect(
+          -mastWidth / 2, hullBaseY - hullHeight / 2 - mastHeight, // x, y (top-left of mast)
+          mastWidth, mastHeight // width, height
+        );
+
+        // Sail (simple triangle)
+        const sailColor = color(245, 245, 220); // Off-white
+        fill(sailColor);
+        noStroke();
+        // Attach sail to one side of the mast
+        const sailXOffset = mastWidth / 2 + mastWidth*0.2; // Start sail next to mast
+        triangle(
+          sailXOffset, hullBaseY - hullHeight / 2 - mastHeight * 0.9, // Top point of sail
+          sailXOffset + sailWidth, hullBaseY - hullHeight / 2 - mastHeight * 0.5, // Mid-sail (outwards)
+          sailXOffset, hullBaseY - hullHeight / 2 - mastHeight * 0.1  // Bottom point of sail
+        );
+
+        // Crew Sick indicator
+        if (shipData.status && shipData.status.crewSick > 0) {
+          fill(CONSTS.HAZARD_COLOURS.Reef); // Red color for sickness
+          noStroke();
+          // Position on the hull
+          ellipse(0, hullBaseY, 6, 6); 
+        }
+        pop();
+      }
+
       function drawPlannedPathPreview(pathIndices) { if (!pathIndices || pathIndices.length === 0 || !gameState.playerShip || !hexes[axialToIndex(gameState.playerShip.q, gameState.playerShip.r)]?.isVisible) return; const startIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r); const start = hexes[startIdx]; const destIdx = pathIndices[pathIndices.length - 1]; if (!hexes[destIdx] || !hexes[destIdx].isVisible) return; const dest = hexes[destIdx]; push(); stroke(CONSTS.PLANNED_PATH_COLOUR); strokeWeight(2.5); noFill(); let lastX = start.x; let lastY = start.y; for (const idx of pathIndices) { if(!hexes[idx] || !hexes[idx].isVisible) break; const h = hexes[idx]; line(lastX, lastY, h.x, h.y); lastX = h.x; lastY = h.y; } if (lastX !== start.x || lastY !== start.y) { const finalTargetHex = hexes[pathIndices[pathIndices.length - 1]]; if(finalTargetHex && finalTargetHex.isVisible){ fill(CONSTS.PLANNED_PATH_COLOUR); noStroke(); translate(finalTargetHex.x, finalTargetHex.y); let angle = atan2(finalTargetHex.y - (pathIndices.length > 1 ? hexes[pathIndices[pathIndices.length-2]].y : start.y), finalTargetHex.x - (pathIndices.length > 1 ? hexes[pathIndices[pathIndices.length-2]].x : start.x)); rotate(angle); const arrowSize = 8; triangle(0, 0, -arrowSize, -arrowSize / 2, -arrowSize, arrowSize / 2); pop(); fill(CONSTS.PLANNED_PATH_COLOUR); noStroke(); textSize(12); textAlign(CENTER, BOTTOM); text(`Cost: ${currentPathPreview.cost}`, dest.x, dest.y - CONSTS.HEX_SIZE * 0.8); } else { pop(); } } else { pop(); } }
       function drawUI() { fill("#ffffff"); noStroke(); textSize(16); textAlign(LEFT, CENTER); const turnText = `Turn: ${gameState.turnCount}`; const mpText = gameState.playerShip ? `MP: ${gameState.playerShip.movesLeft}/${CONSTS.MOVE_POINTS_PER_TURN}` : 'MP: -/-'; const shipCargoText = gameState.playerShip ? `Ship: W:${gameState.playerShip.cargo[CONSTS.RESOURCE_WHEAT]} Wd:${gameState.playerShip.cargo[CONSTS.RESOURCE_WOOD]} G:${gameState.playerShip.cargo[CONSTS.RESOURCE_GOLD]}` : 'Ship: ---'; const crewText = gameState.playerShip ? `Crew: ${gameState.playerShip.crew}` : 'Crew: -'; let statusText = ""; if (gameState.playerShip && gameState.playerShip.status) { if (gameState.playerShip.status.crewSick > 0) statusText += " [Sick]"; if (gameState.playerShip.status.windBoost > 0) statusText += " [Wind]"; if (gameState.playerShip.status.stormPenaltyNextTurn) statusText += " [Storm]"; } let topText = `${turnText} | ${mpText} | ${crewText}${statusText}\n${shipCargoText}`; if (textWidth(`${turnText} | ${mpText} | ${crewText}${statusText}`) < width - 300) { topText = `${turnText} | ${mpText} | ${crewText}${statusText} | ${shipCargoText}`; } text(topText, 16, 28); textAlign(RIGHT, CENTER); const resourceText = `Global: W:${gameState.resources[CONSTS.RESOURCE_WHEAT]} Wd:${gameState.resources[CONSTS.RESOURCE_WOOD]} G:${gameState.resources[CONSTS.RESOURCE_GOLD]}`; text(resourceText, width - 150, 28); textAlign(LEFT, CENTER); }
       function drawMenu() { if (isEventModalOpen) return; push(); translate(menuX, menuY); fill("#262932"); stroke("#888"); strokeWeight(1); rect(0, 0, CONSTS.MENU_WIDTH, actions.length * CONSTS.MENU_ITEM_HEIGHT, 4); noStroke(); fill("#eeeeee"); textSize(14); actions.forEach((act, i) => { const itemY = i * CONSTS.MENU_ITEM_HEIGHT; const isHovered = mouseX > menuX && mouseX < menuX + CONSTS.MENU_WIDTH && mouseY > menuY + itemY && mouseY < menuY + itemY + CONSTS.MENU_ITEM_HEIGHT; const isDisabled = isActionDisabled(act, hexes[selectedIdx]); if (isHovered && !isDisabled) { fill("#4d73ff"); rect(2, itemY + 2, CONSTS.MENU_WIDTH - 4, CONSTS.MENU_ITEM_HEIGHT - 4, 3); fill("#ffffff"); } else if (isDisabled) { fill("#777777"); } else { fill("#eeeeee"); } text(act, 10, itemY + CONSTS.MENU_ITEM_HEIGHT / 2); }); pop(); }
