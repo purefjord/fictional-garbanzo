@@ -641,6 +641,16 @@
         performColonyUpkeep();
         performShipColonyTransfer();
         applyColonyBonusesAndHealing(); // New function call
+
+        // Apply base player income
+        if (gameState.playerShip) {
+          const baseFoodIncome = 12; // Changed from 5 to 12
+          const baseWoodIncome = 10;
+          gameState.resources[CONSTS.RESOURCE_WHEAT] = (gameState.resources[CONSTS.RESOURCE_WHEAT] || 0) + baseFoodIncome;
+          gameState.resources[CONSTS.RESOURCE_WOOD] = (gameState.resources[CONSTS.RESOURCE_WOOD] || 0) + baseWoodIncome;
+          addToLog(`Player base income: +${baseFoodIncome} ${CONSTS.RESOURCE_WHEAT}, +${baseWoodIncome} ${CONSTS.RESOURCE_WOOD}.`); // Updated log
+        }
+
         updateShipStatuses();
         gameState.turnCount++;
         const applyMPModifiers = (ship) => {
