@@ -76,10 +76,14 @@
         FOG_ALPHA_PERCENT: 0.75, UNEXPLORED_COLOUR: "#111116",
         LOG_MAX_LINES: 35, HAZARD_ICON_SIZE: 12,
         MOVE_POINTS_PER_TURN: 5, DEFAULT_MOVE_COST: 1, SCOUT_MP_COST: 1,
-        BUILD_WOOD_COST: 10, BUILD_CREW_COST: 5, BUILD_MP_COST: 1,
+        BUILD_WOOD_COST: 70, BUILD_CREW_COST: 7, BUILD_MP_COST: 35,
         COLONY_UPKEEP_WHEAT_PER_CREW: 1, AI_INITIAL_CREW: 10,
         PLAYER_INITIAL_CREW: 15, // Added for player ship
-        PLAYER_INITIAL_WHEAT: 5, PLAYER_INITIAL_WOOD: 10, PLAYER_INITIAL_GOLD: 5, // Added for player ship
+        PLAYER_INITIAL_WHEAT: 12, PLAYER_INITIAL_WOOD: 275, PLAYER_INITIAL_GOLD: 5, // Added for player ship
+        OUTPOST_UPKEEP_WOOD_COST: 3, OUTPOST_UPKEEP_CREW_COST: 1, OUTPOST_UPKEEP_GOLD_FOOD_COST: 6, // Player outpost upkeep
+        OUTPOST_HEAL_RATE: 0.07, // Player outpost healing rate for ships
+        AI_OUTPOST_BUILD_WOOD_COST: 60, AI_OUTPOST_BUILD_CREW_COST: 6, AI_OUTPOST_BUILD_MP_COST: 30, // AI outpost build costs
+        AI_OUTPOST_UPKEEP_WOOD_COST: 2, AI_OUTPOST_UPKEEP_CREW_COST: 1, AI_OUTPOST_UPKEEP_GOLD_FOOD_COST: 5, // AI outpost upkeep costs
         AI_TARGET_COLONY_RANGE: 4, SHIP_MAX_CARGO: 20,
         FORAGE_MP_COST: 1, TRADE_MP_COST: 1, MARKET_SPAWN_CHANCE: 0.1,
         STORM_DEFAULT_TTL: 3,
@@ -249,10 +253,12 @@
                 [CONSTS.RESOURCE_WOOD]: CONSTS.PLAYER_INITIAL_WOOD,
                 [CONSTS.RESOURCE_GOLD]: CONSTS.PLAYER_INITIAL_GOLD
             },
+            hp: CONSTS.COMBAT_DEFAULT_UNIT_HP,
+            maxHp: CONSTS.COMBAT_DEFAULT_UNIT_HP,
             status: {}
         };
 
-        addToLog(`Your ship [${shipId}] embarked at (${gameState.playerShip.q}, ${gameState.playerShip.r}) on ${getTerrainName(spawnHex.terrain)}.`);
+        addToLog(`Your ship [${shipId}] embarked at (${gameState.playerShip.q}, ${gameState.playerShip.r}) on ${getTerrainName(spawnHex.terrain)}. HP: ${gameState.playerShip.hp}/${gameState.playerShip.maxHp}`);
         updateVisibility(); // Initial visibility based on spawn
         reachableSet = computeReachable(gameState.playerShip.q, gameState.playerShip.r, gameState.playerShip.movesLeft);
         updateVisibility(); // Update visibleReachableSet based on new reachable area
@@ -262,7 +268,7 @@
       }
 
 
-      function spawnAIShip() { let spawnQ = -1, spawnR = -1, spawnIdx = null; let attempts = 0; while (attempts < CONSTS.GRID_W * 2 && spawnIdx === null) { const q = Math.floor(random(CONSTS.GRID_W)); const r = 0; const idx = axialToIndex(q, r); if (idx !== null && hexes[idx] && hexes[idx].terrain === TerrainType.OCEAN) { let occupied = (gameState.playerShip && gameState.playerShip.q === q && gameState.playerShip.r === r) || gameState.aiShips.some(s => s.q === q && s.r === r); if (!occupied) { spawnQ = q; spawnR = r; spawnIdx = idx; break; } } attempts++; } if(spawnIdx === null) { attempts = 0; while (attempts < hexes.length && spawnIdx === null) { const idx = Math.floor(random(hexes.length)); const h = hexes[idx]; if (h && h.terrain === TerrainType.OCEAN) { let occupied = (gameState.playerShip && gameState.playerShip.q === h.q && gameState.playerShip.r === h.r) || gameState.aiShips.some(s => s.q === h.q && s.r === h.r); if (!occupied) { spawnQ = h.q; spawnR = h.r; spawnIdx = idx; break; } } attempts++; } } if(spawnIdx === null) { console.error("Failed to find valid spawn location for AI ship!"); addToLog("Error: Could not spawn AI ship.", "System"); return; } const shipId = gameState.nextShipId++; const newAIShip = { id: shipId, faction: CONSTS.FACTION_AI, q: spawnQ, r: spawnR, movesLeft: CONSTS.MOVE_POINTS_PER_TURN, crew: CONSTS.AI_INITIAL_CREW, cargo: { [CONSTS.RESOURCE_WHEAT]: 5, [CONSTS.RESOURCE_WOOD]: 5, [CONSTS.RESOURCE_GOLD]: 10 }, status: {} }; gameState.aiShips.push(newAIShip); gameState.aiOrderQueues.set(shipId, []); addToLog(`AI Rival ship [${shipId}] launched from (${spawnQ}, ${spawnR})`, CONSTS.FACTION_AI); }
+      function spawnAIShip() { let spawnQ = -1, spawnR = -1, spawnIdx = null; let attempts = 0; while (attempts < CONSTS.GRID_W * 2 && spawnIdx === null) { const q = Math.floor(random(CONSTS.GRID_W)); const r = 0; const idx = axialToIndex(q, r); if (idx !== null && hexes[idx] && hexes[idx].terrain === TerrainType.OCEAN) { let occupied = (gameState.playerShip && gameState.playerShip.q === q && gameState.playerShip.r === r) || gameState.aiShips.some(s => s.q === q && s.r === r); if (!occupied) { spawnQ = q; spawnR = r; spawnIdx = idx; break; } } attempts++; } if(spawnIdx === null) { attempts = 0; while (attempts < hexes.length && spawnIdx === null) { const idx = Math.floor(random(hexes.length)); const h = hexes[idx]; if (h && h.terrain === TerrainType.OCEAN) { let occupied = (gameState.playerShip && gameState.playerShip.q === h.q && gameState.playerShip.r === h.r) || gameState.aiShips.some(s => s.q === h.q && s.r === h.r); if (!occupied) { spawnQ = h.q; spawnR = h.r; spawnIdx = idx; break; } } attempts++; } } if(spawnIdx === null) { console.error("Failed to find valid spawn location for AI ship!"); addToLog("Error: Could not spawn AI ship.", "System"); return; } const shipId = gameState.nextShipId++; const newAIShip = { id: shipId, faction: CONSTS.FACTION_AI, q: spawnQ, r: spawnR, movesLeft: CONSTS.MOVE_POINTS_PER_TURN, crew: CONSTS.AI_INITIAL_CREW, cargo: { [CONSTS.RESOURCE_WHEAT]: 5, [CONSTS.RESOURCE_WOOD]: 5, [CONSTS.RESOURCE_GOLD]: 10 }, hp: CONSTS.COMBAT_DEFAULT_UNIT_HP, maxHp: CONSTS.COMBAT_DEFAULT_UNIT_HP, status: {} }; gameState.aiShips.push(newAIShip); gameState.aiOrderQueues.set(shipId, []); addToLog(`AI Rival ship [${shipId}] launched from (${spawnQ}, ${spawnR}). HP: ${newAIShip.hp}/${newAIShip.maxHp}`, CONSTS.FACTION_AI); }
       function generateTerrain() { hexes.forEach(h => { if (h.q === 0 || h.q === CONSTS.GRID_W - 1 || h.r === 0 || h.r === CONSTS.GRID_H - 1) { h.terrain = TerrainType.OCEAN; }}); let centerQ = Math.floor(CONSTS.GRID_W / 2); let centerR = Math.floor(CONSTS.GRID_H / 2); for (let i = 0; i < 5; i++) { let q = Math.floor(random(centerQ-3, centerQ+3)); let r = Math.floor(random(centerR-3, centerR+3)); let rad = Math.floor(random(1,3)); for (const idx of spiral(q, r, rad)) { if(hexes[idx] && hexes[idx].terrain !== TerrainType.OCEAN) { hexes[idx].terrain = (random() < 0.6) ? TerrainType.OCEAN : TerrainType.COAST; }}} const coastCandidates = []; hexes.forEach((h, idx) => { if (!h || h.terrain === TerrainType.OCEAN) return; const neighbors = axialNeighbors(h.q, h.r); for (const nCoords of neighbors) { const nIdx = axialToIndex(nCoords.q, nCoords.r); if (nIdx !== null && hexes[nIdx]?.terrain === TerrainType.OCEAN) { coastCandidates.push(idx); break; } } }); coastCandidates.forEach(idx => { if (hexes[idx]) hexes[idx].terrain = TerrainType.COAST; }); hexes.forEach(h => { if (!h) return; if (h.terrain !== TerrainType.OCEAN && h.terrain !== TerrainType.COAST) { const rnd = random(); if (rnd < 0.45) h.terrain = TerrainType.PLAINS; else if (rnd < 0.70) h.terrain = TerrainType.FOREST; else if (rnd < 0.90) h.terrain = TerrainType.HILLS; else h.terrain = TerrainType.MOUNTAINS; } if (h.terrain === TerrainType.COAST || h.terrain === TerrainType.FOREST || h.terrain === TerrainType.HILLS) { h.forageable = true; } if (h.terrain === TerrainType.COAST) { if (random() < CONSTS.MARKET_SPAWN_CHANCE) { h.market = { buy: { ...priceTable.buy }, sell: { ...priceTable.sell } }; } } }); for (let i = 0; i < 2; i++) { hexes.forEach(h => { if(!h || h.terrain < TerrainType.HILLS) return; let plainsNeighbors = 0; const neighbors = axialNeighbors(h.q, h.r); for (const nCoords of neighbors) { const nIdx = axialToIndex(nCoords.q, nCoords.r); if (nIdx !== null && hexes[nIdx] && hexes[nIdx].terrain <= TerrainType.PLAINS) { plainsNeighbors++; } } if(plainsNeighbors >= 4 && h.terrain === TerrainType.MOUNTAINS) h.terrain = TerrainType.HILLS; else if (plainsNeighbors >= 5 && h.terrain === TerrainType.HILLS) h.terrain = TerrainType.PLAINS; }); } let marketCount = hexes.reduce((count, h) => count + (h && h.market ? 1 : 0), 0); console.log(`Terrain generated. Created ${marketCount} markets.`); }
 
       /* ===== DRAW LOOP ===== */
@@ -415,10 +421,199 @@
       }
 
       /* ===== TURN LOGIC (Phases) ===== */
-      function planAITurn() { addToLog("Planning AI turn...", CONSTS.FACTION_AI); gameState.aiShips.forEach(aiShip => { const shipId = aiShip.id; const currentOrders = []; let currentMp = aiShip.movesLeft; if (currentMp <= 0) { gameState.aiOrderQueues.set(shipId, []); return; } const currentIdx = axialToIndex(aiShip.q, aiShip.r); if (currentIdx === null) { gameState.aiOrderQueues.set(shipId, []); return; } let targetIdx = null; let sailOrder = null; let mpAfterSail = currentMp; let plannedEndIdx = currentIdx; let nearestPlayerColonyDist = Infinity; let nearestPlayerColonyIdx = null; hexes.forEach((h, idx) => { if (h && h.colony && h.colony.faction === CONSTS.FACTION_PLAYER) { const dist = axialDistance(aiShip, h); if (dist < nearestPlayerColonyDist && dist <= CONSTS.AI_TARGET_COLONY_RANGE) { nearestPlayerColonyDist = dist; nearestPlayerColonyIdx = idx; } } }); if (nearestPlayerColonyIdx !== null) { targetIdx = nearestPlayerColonyIdx; } else { let nearestCoastDist = Infinity; let nearestCoastIdx = null; hexes.forEach((h, idx) => { if (h && h.terrain === TerrainType.COAST && !h.colony) { const dist = axialDistance(aiShip, h); if (dist < nearestCoastDist) { nearestCoastDist = dist; nearestCoastIdx = idx; } } }); if (nearestCoastIdx !== null) { targetIdx = nearestCoastIdx; } else { const aiReachable = computeReachable(aiShip.q, aiShip.r, currentMp); const potentialTargets = []; aiReachable.forEach(idx => { const h = hexes[idx]; if(h && (h.terrain === TerrainType.COAST || h.forageable || h.market) && !h.colony) { potentialTargets.push(idx); } }); if(potentialTargets.length > 0) { targetIdx = random(potentialTargets); } } } if (targetIdx !== null && targetIdx !== currentIdx) { const pathResult = aStar(currentIdx, targetIdx, MOVE_COST); if (pathResult && pathResult.path.length > 0) { let mpSpent = 0; let reachablePathEndIdx = currentIdx; for(const stepIdx of pathResult.path) { const stepCost = MOVE_COST[hexes[stepIdx].terrain] ?? CONSTS.DEFAULT_MOVE_COST; if (mpSpent + stepCost <= currentMp) { mpSpent += stepCost; reachablePathEndIdx = stepIdx; } else { break; } } if(reachablePathEndIdx !== currentIdx) { sailOrder = { id: gameState.nextOrderId++, type: 'Sail', targetIdx: reachablePathEndIdx, cost: mpSpent }; plannedEndIdx = reachablePathEndIdx; mpAfterSail = currentMp - mpSpent; } } } if (sailOrder) { currentOrders.push(sailOrder); } const plannedEndHex = hexes[plannedEndIdx]; if (!plannedEndHex) { gameState.aiOrderQueues.set(shipId, currentOrders); return; } let performedSecondaryAction = false; if (plannedEndHex.terrain === TerrainType.COAST && !plannedEndHex.colony && aiShip.crew >= CONSTS.BUILD_CREW_COST && mpAfterSail >= CONSTS.BUILD_MP_COST) { const buildOrder = { id: gameState.nextOrderId++, type: 'Build Outpost', targetIdx: plannedEndIdx }; currentOrders.push(buildOrder); mpAfterSail -= CONSTS.BUILD_MP_COST; performedSecondaryAction = true; } if (!performedSecondaryAction && plannedEndHex.forageable && mpAfterSail >= CONSTS.FORAGE_MP_COST) { const resourceType = (plannedEndHex.terrain === TerrainType.FOREST) ? CONSTS.RESOURCE_WOOD : CONSTS.RESOURCE_WHEAT; if (aiShip.cargo[resourceType] < CONSTS.SHIP_MAX_CARGO * 0.5 || (aiShip.cargo[CONSTS.RESOURCE_WHEAT] + aiShip.cargo[CONSTS.RESOURCE_WOOD]) < CONSTS.SHIP_MAX_CARGO) { const forageOrder = { id: gameState.nextOrderId++, type: 'Forage', targetIdx: plannedEndIdx }; currentOrders.push(forageOrder); mpAfterSail -= CONSTS.FORAGE_MP_COST; performedSecondaryAction = true; } } if (!performedSecondaryAction && plannedEndHex.market && mpAfterSail >= CONSTS.TRADE_MP_COST) { const market = plannedEndHex.market; let tradeOrder = null; const resToBuy = aiShip.cargo[CONSTS.RESOURCE_WHEAT] < 5 ? CONSTS.RESOURCE_WHEAT : (aiShip.cargo[CONSTS.RESOURCE_WOOD] < 5 ? CONSTS.RESOURCE_WOOD : null); const resToSell = aiShip.cargo[CONSTS.RESOURCE_WHEAT] > CONSTS.SHIP_MAX_CARGO * 0.8 ? CONSTS.RESOURCE_WHEAT : (aiShip.cargo[CONSTS.RESOURCE_WOOD] > CONSTS.SHIP_MAX_CARGO * 0.8 ? CONSTS.RESOURCE_WOOD : null); if (resToBuy && market.buy[resToBuy] && aiShip.cargo[CONSTS.RESOURCE_GOLD] >= market.buy[resToBuy] && aiShip.cargo[resToBuy] < CONSTS.SHIP_MAX_CARGO) { tradeOrder = { id: gameState.nextOrderId++, type: 'Trade', targetIdx: plannedEndIdx, action: 'Buy', resource: resToBuy, amount: 1 }; } else if (resToSell && market.sell[resToSell] && aiShip.cargo[resToSell] > 0) { tradeOrder = { id: gameState.nextOrderId++, type: 'Trade', targetIdx: plannedEndIdx, action: 'Sell', resource: resToSell, amount: 1 }; } if (tradeOrder) { currentOrders.push(tradeOrder); mpAfterSail -= CONSTS.TRADE_MP_COST; performedSecondaryAction = true; } } gameState.aiOrderQueues.set(shipId, currentOrders); }); }
+      function planAITurn() { addToLog("Planning AI turn...", CONSTS.FACTION_AI); gameState.aiShips.forEach(aiShip => { const shipId = aiShip.id; const currentOrders = []; let currentMp = aiShip.movesLeft; if (currentMp <= 0) { gameState.aiOrderQueues.set(shipId, []); return; } const currentIdx = axialToIndex(aiShip.q, aiShip.r); if (currentIdx === null) { gameState.aiOrderQueues.set(shipId, []); return; } let targetIdx = null; let sailOrder = null; let mpAfterSail = currentMp; let plannedEndIdx = currentIdx; let nearestPlayerColonyDist = Infinity; let nearestPlayerColonyIdx = null; hexes.forEach((h, idx) => { if (h && h.colony && h.colony.faction === CONSTS.FACTION_PLAYER) { const dist = axialDistance(aiShip, h); if (dist < nearestPlayerColonyDist && dist <= CONSTS.AI_TARGET_COLONY_RANGE) { nearestPlayerColonyDist = dist; nearestPlayerColonyIdx = idx; } } }); if (nearestPlayerColonyIdx !== null) { targetIdx = nearestPlayerColonyIdx; } else { let nearestCoastDist = Infinity; let nearestCoastIdx = null; hexes.forEach((h, idx) => { if (h && h.terrain === TerrainType.COAST && !h.colony) { const dist = axialDistance(aiShip, h); if (dist < nearestCoastDist) { nearestCoastDist = dist; nearestCoastIdx = idx; } } }); if (nearestCoastIdx !== null) { targetIdx = nearestCoastIdx; } else { const aiReachable = computeReachable(aiShip.q, aiShip.r, currentMp); const potentialTargets = []; aiReachable.forEach(idx => { const h = hexes[idx]; if(h && (h.terrain === TerrainType.COAST || h.forageable || h.market) && !h.colony) { potentialTargets.push(idx); } }); if(potentialTargets.length > 0) { targetIdx = random(potentialTargets); } } } if (targetIdx !== null && targetIdx !== currentIdx) { const pathResult = aStar(currentIdx, targetIdx, MOVE_COST); if (pathResult && pathResult.path.length > 0) { let mpSpent = 0; let reachablePathEndIdx = currentIdx; for(const stepIdx of pathResult.path) { const stepCost = MOVE_COST[hexes[stepIdx].terrain] ?? CONSTS.DEFAULT_MOVE_COST; if (mpSpent + stepCost <= currentMp) { mpSpent += stepCost; reachablePathEndIdx = stepIdx; } else { break; } } if(reachablePathEndIdx !== currentIdx) { sailOrder = { id: gameState.nextOrderId++, type: 'Sail', targetIdx: reachablePathEndIdx, cost: mpSpent }; plannedEndIdx = reachablePathEndIdx; mpAfterSail = currentMp - mpSpent; } } } if (sailOrder) { currentOrders.push(sailOrder); } const plannedEndHex = hexes[plannedEndIdx]; if (!plannedEndHex) { gameState.aiOrderQueues.set(shipId, currentOrders); return; } let performedSecondaryAction = false; if ( plannedEndHex.terrain === TerrainType.COAST && !plannedEndHex.colony && (aiShip.cargo[CONSTS.RESOURCE_WOOD] || 0) >= CONSTS.AI_OUTPOST_BUILD_WOOD_COST && aiShip.crew >= CONSTS.AI_OUTPOST_BUILD_CREW_COST && mpAfterSail >= CONSTS.AI_OUTPOST_BUILD_MP_COST ) { const buildOrder = { id: gameState.nextOrderId++, type: 'Build Outpost', targetIdx: plannedEndIdx }; currentOrders.push(buildOrder); mpAfterSail -= CONSTS.AI_OUTPOST_BUILD_MP_COST; performedSecondaryAction = true; } if (!performedSecondaryAction && plannedEndHex.forageable && mpAfterSail >= CONSTS.FORAGE_MP_COST) { const resourceType = (plannedEndHex.terrain === TerrainType.FOREST) ? CONSTS.RESOURCE_WOOD : CONSTS.RESOURCE_WHEAT; if (aiShip.cargo[resourceType] < CONSTS.SHIP_MAX_CARGO * 0.5 || (aiShip.cargo[CONSTS.RESOURCE_WHEAT] + aiShip.cargo[CONSTS.RESOURCE_WOOD]) < CONSTS.SHIP_MAX_CARGO) { const forageOrder = { id: gameState.nextOrderId++, type: 'Forage', targetIdx: plannedEndIdx }; currentOrders.push(forageOrder); mpAfterSail -= CONSTS.FORAGE_MP_COST; performedSecondaryAction = true; } } if (!performedSecondaryAction && plannedEndHex.market && mpAfterSail >= CONSTS.TRADE_MP_COST) { const market = plannedEndHex.market; let tradeOrder = null; const resToBuy = aiShip.cargo[CONSTS.RESOURCE_WHEAT] < 5 ? CONSTS.RESOURCE_WHEAT : (aiShip.cargo[CONSTS.RESOURCE_WOOD] < 5 ? CONSTS.RESOURCE_WOOD : null); const resToSell = aiShip.cargo[CONSTS.RESOURCE_WHEAT] > CONSTS.SHIP_MAX_CARGO * 0.8 ? CONSTS.RESOURCE_WHEAT : (aiShip.cargo[CONSTS.RESOURCE_WOOD] > CONSTS.SHIP_MAX_CARGO * 0.8 ? CONSTS.RESOURCE_WOOD : null); if (resToBuy && market.buy[resToBuy] && aiShip.cargo[CONSTS.RESOURCE_GOLD] >= market.buy[resToBuy] && aiShip.cargo[resToBuy] < CONSTS.SHIP_MAX_CARGO) { tradeOrder = { id: gameState.nextOrderId++, type: 'Trade', targetIdx: plannedEndIdx, action: 'Buy', resource: resToBuy, amount: 1 }; } else if (resToSell && market.sell[resToSell] && aiShip.cargo[resToSell] > 0) { tradeOrder = { id: gameState.nextOrderId++, type: 'Trade', targetIdx: plannedEndIdx, action: 'Sell', resource: resToSell, amount: 1 }; } if (tradeOrder) { currentOrders.push(tradeOrder); mpAfterSail -= CONSTS.TRADE_MP_COST; performedSecondaryAction = true; } } gameState.aiOrderQueues.set(shipId, currentOrders); }); }
       function executeAllTurnOrders() { addToLog(`--- Executing Orders Turn ${gameState.turnCount} ---`, "System"); if (gameState.playerShip) { const playerShip = gameState.playerShip; const playerQueue = [...gameState.playerOrderQueue]; gameState.playerOrderQueue = []; let currentShipIdx = axialToIndex(playerShip.q, playerShip.r); if (playerQueue.length > 0) { addToLog(`Executing Player [${playerShip.id}] orders (${playerQueue.length})...`); for (const order of playerQueue) { currentShipIdx = resolveOrder(order, playerShip, currentShipIdx); if (gameState.combat) { addToLog("Combat initiated, remaining orders for this ship discarded.", "System"); updateOrderPanel(); return; } } addToLog(`Player [${playerShip.id}] finished orders.`); } } else { if (gameState.playerOrderQueue.length > 0) { addToLog("Clearing player order queue (no ship present).", "System"); gameState.playerOrderQueue = []; } } gameState.aiShips.forEach(aiShip => { if (gameState.combat) return; const aiQueue = gameState.aiOrderQueues.get(aiShip.id) || []; gameState.aiOrderQueues.set(aiShip.id, []); let currentShipIdx = axialToIndex(aiShip.q, aiShip.r); if (aiQueue.length > 0) { addToLog(`Executing AI Ship [${aiShip.id}] orders (${aiQueue.length})...`, CONSTS.FACTION_AI); for (const order of aiQueue) { currentShipIdx = resolveOrder(order, aiShip, currentShipIdx); if (gameState.combat) { addToLog("Combat initiated, remaining orders for this ship discarded.", "System"); updateOrderPanel(); return; } } addToLog(`AI Ship [${aiShip.id}] finished orders.`, CONSTS.FACTION_AI); } else { addToLog(`AI Ship [${aiShip.id}] has no orders queued.`, CONSTS.FACTION_AI); } }); if (!gameState.combat) addToLog("--- Order Execution Complete ---", "System"); if (gameState.playerShip) { reachableSet = computeReachable(gameState.playerShip.q, gameState.playerShip.r, gameState.playerShip.movesLeft); } else { reachableSet.clear(); } updateVisibility(); updateOrderPanel(); select('#endTurnBtn').elt.disabled = true; }
-      function resolveOrder(order, ship, currentShipIdx) { const faction = ship.faction; const logPrefix = faction === CONSTS.FACTION_AI ? CONSTS.FACTION_AI : CONSTS.FACTION_PLAYER; if (currentShipIdx === null) { addToLog(`Order ${order.id} (${order.type}) skipped: Ship ${ship.id} invalid state.`, logPrefix); return currentShipIdx; } const targetHex = hexes[order.targetIdx]; if (!targetHex) { addToLog(`Order ${order.id} (${order.type}) skipped: Invalid target index ${order.targetIdx}.`, logPrefix); return currentShipIdx; } const targetCoordsLabel = `(${targetHex.q}, ${targetHex.r})`; const needsPresence = ['Build Outpost', 'Forage', 'Trade', 'Scout']; if (needsPresence.includes(order.type) && currentShipIdx !== order.targetIdx) { addToLog(`Order ${order.id} (${order.type}) at ${targetCoordsLabel} skipped: Ship ${ship.id} not present.`, logPrefix); return currentShipIdx; } switch (order.type) { case 'Sail': case 'Attack': { const pathResult = aStar(currentShipIdx, order.targetIdx, MOVE_COST); const calculatedCost = pathResult ? pathResult.cost : Infinity; if (!pathResult || calculatedCost === Infinity) { addToLog(`Order ${order.id} (${order.type}) to ${targetCoordsLabel} failed: No path.`, logPrefix); return currentShipIdx; } if (calculatedCost > ship.movesLeft) { addToLog(`Order ${order.id} (${order.type}) to ${targetCoordsLabel} failed: Insufficient MP (Needs ${calculatedCost}, Has ${ship.movesLeft}).`, logPrefix); return currentShipIdx; } const destCoords = indexToAxial(order.targetIdx); if (!destCoords) { console.error(`Critical Error: ${order.type} destination index ${order.targetIdx}`); addToLog(`Order ${order.id} (${order.type}) critical error.`, logPrefix); return currentShipIdx; } ship.q = destCoords.q; ship.r = destCoords.r; ship.movesLeft -= calculatedCost; currentShipIdx = order.targetIdx; addToLog(`Order ${order.id}: Ship ${ship.id} moved to ${targetCoordsLabel} ${getTerrainName(targetHex.terrain)} for ${order.type} (Cost ${calculatedCost}, MP left ${ship.movesLeft}).`, logPrefix); if (order.type === 'Attack') { if (targetHex.colony && targetHex.colony.faction !== ship.faction) { enterCombat(ship, targetHex, CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY); } else { const enemyShipOnHex = gameState.aiShips.find(s => s.q === targetHex.q && s.r === targetHex.r && s.faction !== ship.faction) || (gameState.playerShip && ship.faction === CONSTS.FACTION_AI && gameState.playerShip.q === targetHex.q && gameState.playerShip.r === targetHex.r); if (enemyShipOnHex) { enterCombat(ship, enemyShipOnHex, CONSTS.COMBAT_CONTEXT_SHIP_VS_SHIP); } } } break; } case 'Scout': { if (CONSTS.SCOUT_MP_COST > ship.movesLeft) { addToLog(`Order ${order.id} (Scout) at ${targetCoordsLabel} failed: Insufficient MP.`, logPrefix); return currentShipIdx; } ship.movesLeft -= CONSTS.SCOUT_MP_COST; let revealedCount = 0; if (faction === CONSTS.FACTION_PLAYER) { for (const idx of spiral(targetHex.q, targetHex.r, 1)) { if (hexes[idx] && !hexes[idx].isExplored) { hexes[idx].isExplored = true; revealedCount++; } } addToLog(`Order ${order.id}: Ship ${ship.id} scouted at ${targetCoordsLabel}. Revealed ${revealedCount} hexes (Cost ${CONSTS.SCOUT_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); } else { addToLog(`Order ${order.id}: AI Ship ${ship.id} scouted at ${targetCoordsLabel} (Cost ${CONSTS.SCOUT_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); } break; } case 'Build Outpost': { if ([TerrainType.MOUNTAINS, TerrainType.OCEAN].includes(targetHex.terrain)) { addToLog(`Build failed: Cannot build on ${getTerrainName(targetHex.terrain)}.`, logPrefix); return currentShipIdx; } if (targetHex.colony !== null) { addToLog(`Build failed: Location occupied.`, logPrefix); return currentShipIdx; } if (CONSTS.BUILD_MP_COST > ship.movesLeft) { addToLog(`Build failed: Insufficient MP.`, logPrefix); return currentShipIdx; } if (ship.crew < CONSTS.BUILD_CREW_COST) { addToLog(`Build failed: Insufficient Crew.`, logPrefix); return currentShipIdx; } let resourceCostStr = ""; if (faction === CONSTS.FACTION_PLAYER) { if (gameState.resources[CONSTS.RESOURCE_WOOD] < CONSTS.BUILD_WOOD_COST) { addToLog(`Build failed: Insufficient Global ${CONSTS.RESOURCE_WOOD}.`, logPrefix); return currentShipIdx; } gameState.resources[CONSTS.RESOURCE_WOOD] -= CONSTS.BUILD_WOOD_COST; resourceCostStr = `${CONSTS.BUILD_WOOD_COST} ${CONSTS.RESOURCE_WOOD} (Global), `; } ship.movesLeft -= CONSTS.BUILD_MP_COST; ship.crew -= CONSTS.BUILD_CREW_COST; const newColonyName = generateColonyName(faction); targetHex.colony = { name: newColonyName, stock: { [CONSTS.RESOURCE_WHEAT]: 0, [CONSTS.RESOURCE_WOOD]: 0 }, crew: CONSTS.BUILD_CREW_COST, faction: faction, q: targetHex.q, r: targetHex.r }; addToLog(`Order ${order.id}: Ship ${ship.id} founded colony "${newColonyName}" at ${targetCoordsLabel} (Cost ${CONSTS.BUILD_MP_COST} MP, ${resourceCostStr}${CONSTS.BUILD_CREW_COST} Crew. MP left ${ship.movesLeft})`, logPrefix); break; } case 'Forage': { if (!targetHex.forageable) { addToLog(`Forage failed: Not forageable terrain.`, logPrefix); return currentShipIdx; } if (CONSTS.FORAGE_MP_COST > ship.movesLeft) { addToLog(`Forage failed: Insufficient MP.`, logPrefix); return currentShipIdx; } const resourceType = (targetHex.terrain === TerrainType.FOREST) ? CONSTS.RESOURCE_WOOD : CONSTS.RESOURCE_WHEAT; let yieldAmount = Math.floor(random(1, 4)); const totalCargoNow = Object.values(ship.cargo).reduce((a,b)=>a+b,0); const spaceAvailable = CONSTS.SHIP_MAX_CARGO - totalCargoNow; const actualAmount = Math.max(0, Math.min(yieldAmount, spaceAvailable)); ship.movesLeft -= CONSTS.FORAGE_MP_COST; if (actualAmount > 0) { ship.cargo[resourceType] = (ship.cargo[resourceType]||0) + actualAmount; addToLog(`Order ${order.id}: Ship ${ship.id} foraged ${actualAmount} ${resourceType} at ${targetCoordsLabel} (Cost ${CONSTS.FORAGE_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); if (yieldAmount > actualAmount) { addToLog(`   (Cargo capacity reached)`, logPrefix); } } else { addToLog(`Order ${order.id}: Ship ${ship.id} attempted forage at ${targetCoordsLabel}, but cargo full. MP Spent. (MP left ${ship.movesLeft}).`, logPrefix); } break; } case 'Trade': { const market = targetHex.market; if (!market) { addToLog(`Trade failed: No market.`, logPrefix); return currentShipIdx; } if (CONSTS.TRADE_MP_COST > ship.movesLeft) { addToLog(`Trade failed: Insufficient MP.`, logPrefix); return currentShipIdx; } ship.movesLeft -= CONSTS.TRADE_MP_COST; let action = null; let resource = null; let amount = 1; if (faction === CONSTS.FACTION_AI && order.action && order.resource) { action = order.action; resource = order.resource; amount = order.amount || 1; } else { if (ship.cargo[CONSTS.RESOURCE_GOLD] >= market.buy[CONSTS.RESOURCE_WHEAT] && (ship.cargo[CONSTS.RESOURCE_WHEAT]||0) < CONSTS.SHIP_MAX_CARGO) { action = 'Buy'; resource = CONSTS.RESOURCE_WHEAT; amount = 1; } else if ((ship.cargo[CONSTS.RESOURCE_WHEAT]||0) > 0 && market.sell[CONSTS.RESOURCE_WHEAT] > 0) { action = 'Sell'; resource = CONSTS.RESOURCE_WHEAT; amount = 1; } } if (action && resource && market.buy[resource] !== null && market.sell[resource] !== null) { if (action === 'Buy') { const cost = market.buy[resource] * amount; const canAfford = ship.cargo[CONSTS.RESOURCE_GOLD] >= cost; const totalCargoNow = Object.values(ship.cargo).reduce((a,b)=>a+b,0) - (ship.cargo[resource]||0); const hasSpace = (totalCargoNow + amount) <= CONSTS.SHIP_MAX_CARGO; if (canAfford && hasSpace) { ship.cargo[resource] = (ship.cargo[resource]||0) + amount; ship.cargo[CONSTS.RESOURCE_GOLD] -= cost; addToLog(`Order ${order.id}: Ship ${ship.id} bought ${amount} ${resource} for ${cost} ${CONSTS.RESOURCE_GOLD} at ${targetCoordsLabel}.`, logPrefix); } else { addToLog(`Trade (Buy ${resource}) failed (Afford: ${canAfford}, Space: ${hasSpace}).`, logPrefix); } } else if (action === 'Sell') { const hasResource = (ship.cargo[resource]||0) >= amount; const canSell = market.sell[resource] > 0; if (hasResource && canSell) { const earnings = market.sell[resource] * amount; ship.cargo[resource] -= amount; ship.cargo[CONSTS.RESOURCE_GOLD] += earnings; addToLog(`Order ${order.id}: Ship ${ship.id} sold ${amount} ${resource} for ${earnings} ${CONSTS.RESOURCE_GOLD} at ${targetCoordsLabel}.`, logPrefix); } else { addToLog(`Trade (Sell ${resource}) failed (Have: ${hasResource}, Market Buys: ${canSell}).`, logPrefix); } } } else { addToLog(`Trade attempt at ${targetCoordsLabel}, no valid transaction. MP Spent.`, logPrefix); } addToLog(`   (MP left ${ship.movesLeft})`, logPrefix); break; } default: addToLog(`Order ${order.id} skipped: Unknown order type "${order.type}".`, logPrefix); } return currentShipIdx; }
-      function performColonyUpkeep() { let playerColonies = hexes.filter(h => h && h.colony && h.colony.faction === CONSTS.FACTION_PLAYER); if (playerColonies.length === 0) return; addToLog("Performing player colony upkeep..."); let totalWheatConsumed = 0; let starvedColonies = 0; playerColonies.forEach(h => { const colony = h.colony; let needed = (CONSTS.COLONY_UPKEEP_WHEAT_PER_CREW * colony.crew) || 1; let consumed = 0; let localConsume = Math.min(needed, colony.stock[CONSTS.RESOURCE_WHEAT]); if (localConsume > 0) { colony.stock[CONSTS.RESOURCE_WHEAT] -= localConsume; consumed += localConsume; needed -= localConsume; } if (needed > 0) { let globalConsume = Math.min(needed, gameState.resources[CONSTS.RESOURCE_WHEAT]); if (globalConsume > 0) { gameState.resources[CONSTS.RESOURCE_WHEAT] -= globalConsume; consumed += globalConsume; needed -= globalConsume; addToLog(`Colony "${colony.name}" drew ${globalConsume} ${CONSTS.RESOURCE_WHEAT} from global stock.`); } } if (needed > 0) { addToLog(`Colony "${colony.name}" at (${h.q}, ${h.r}) suffers hunger! (Lacked ${needed} ${CONSTS.RESOURCE_WHEAT}) Crew: ${colony.crew}`, "System"); starvedColonies++; } else { totalWheatConsumed += consumed; } }); if (totalWheatConsumed > 0) addToLog(`Total player colony upkeep: ${totalWheatConsumed} ${CONSTS.RESOURCE_WHEAT} consumed.`); if (starvedColonies === 0 && playerColonies.length > 0) addToLog("All player colonies fed."); else if (starvedColonies > 0) addToLog(`${starvedColonies} player colonies experienced hunger.`, "System"); }
+      function resolveOrder(order, ship, currentShipIdx) { const faction = ship.faction; const logPrefix = faction === CONSTS.FACTION_AI ? CONSTS.FACTION_AI : CONSTS.FACTION_PLAYER; if (currentShipIdx === null) { addToLog(`Order ${order.id} (${order.type}) skipped: Ship ${ship.id} invalid state.`, logPrefix); return currentShipIdx; } const targetHex = hexes[order.targetIdx]; if (!targetHex) { addToLog(`Order ${order.id} (${order.type}) skipped: Invalid target index ${order.targetIdx}.`, logPrefix); return currentShipIdx; } const targetCoordsLabel = `(${targetHex.q}, ${targetHex.r})`; const needsPresence = ['Build Outpost', 'Forage', 'Trade', 'Scout']; if (needsPresence.includes(order.type) && currentShipIdx !== order.targetIdx) { addToLog(`Order ${order.id} (${order.type}) at ${targetCoordsLabel} skipped: Ship ${ship.id} not present.`, logPrefix); return currentShipIdx; } switch (order.type) { case 'Sail': case 'Attack': { const pathResult = aStar(currentShipIdx, order.targetIdx, MOVE_COST); const calculatedCost = pathResult ? pathResult.cost : Infinity; if (!pathResult || calculatedCost === Infinity) { addToLog(`Order ${order.id} (${order.type}) to ${targetCoordsLabel} failed: No path.`, logPrefix); return currentShipIdx; } if (calculatedCost > ship.movesLeft) { addToLog(`Order ${order.id} (${order.type}) to ${targetCoordsLabel} failed: Insufficient MP (Needs ${calculatedCost}, Has ${ship.movesLeft}).`, logPrefix); return currentShipIdx; } const destCoords = indexToAxial(order.targetIdx); if (!destCoords) { console.error(`Critical Error: ${order.type} destination index ${order.targetIdx}`); addToLog(`Order ${order.id} (${order.type}) critical error.`, logPrefix); return currentShipIdx; } ship.q = destCoords.q; ship.r = destCoords.r; ship.movesLeft -= calculatedCost; currentShipIdx = order.targetIdx; addToLog(`Order ${order.id}: Ship ${ship.id} moved to ${targetCoordsLabel} ${getTerrainName(targetHex.terrain)} for ${order.type} (Cost ${calculatedCost}, MP left ${ship.movesLeft}).`, logPrefix); if (order.type === 'Attack') { if (targetHex.colony && targetHex.colony.faction !== ship.faction) { enterCombat(ship, targetHex, CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY); } else { const enemyShipOnHex = gameState.aiShips.find(s => s.q === targetHex.q && s.r === targetHex.r && s.faction !== ship.faction) || (gameState.playerShip && ship.faction === CONSTS.FACTION_AI && gameState.playerShip.q === targetHex.q && gameState.playerShip.r === targetHex.r); if (enemyShipOnHex) { enterCombat(ship, enemyShipOnHex, CONSTS.COMBAT_CONTEXT_SHIP_VS_SHIP); } } } break; } case 'Scout': { if (CONSTS.SCOUT_MP_COST > ship.movesLeft) { addToLog(`Order ${order.id} (Scout) at ${targetCoordsLabel} failed: Insufficient MP.`, logPrefix); return currentShipIdx; } ship.movesLeft -= CONSTS.SCOUT_MP_COST; let revealedCount = 0; if (faction === CONSTS.FACTION_PLAYER) { for (const idx of spiral(targetHex.q, targetHex.r, 1)) { if (hexes[idx] && !hexes[idx].isExplored) { hexes[idx].isExplored = true; revealedCount++; } } addToLog(`Order ${order.id}: Ship ${ship.id} scouted at ${targetCoordsLabel}. Revealed ${revealedCount} hexes (Cost ${CONSTS.SCOUT_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); } else { addToLog(`Order ${order.id}: AI Ship ${ship.id} scouted at ${targetCoordsLabel} (Cost ${CONSTS.SCOUT_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); } break; } case 'Build Outpost': { if ([TerrainType.MOUNTAINS, TerrainType.OCEAN].includes(targetHex.terrain)) { addToLog(`Build failed: Cannot build on ${getTerrainName(targetHex.terrain)}.`, logPrefix); return currentShipIdx; } if (targetHex.colony !== null) { addToLog(`Build failed: Location occupied.`, logPrefix); return currentShipIdx; }
+        let woodCost, crewCost, mpCost, initialColonyCrew;
+        let resourceCostStr = "";
+
+        if (faction === CONSTS.FACTION_PLAYER) {
+          woodCost = CONSTS.BUILD_WOOD_COST;
+          crewCost = CONSTS.BUILD_CREW_COST;
+          mpCost = CONSTS.BUILD_MP_COST;
+          initialColonyCrew = crewCost;
+
+          if (mpCost > ship.movesLeft) { addToLog(`Build failed: Insufficient MP. Needs ${mpCost}, Has ${ship.movesLeft}.`, logPrefix); return currentShipIdx; }
+          if (ship.crew < crewCost) { addToLog(`Build failed: Insufficient Crew. Needs ${crewCost}, Has ${ship.crew}.`, logPrefix); return currentShipIdx; }
+          if (gameState.resources[CONSTS.RESOURCE_WOOD] < woodCost) { addToLog(`Build failed: Insufficient Global Wood. Needs ${woodCost}, Has ${gameState.resources[CONSTS.RESOURCE_WOOD]}.`, logPrefix); return currentShipIdx; }
+
+          gameState.resources[CONSTS.RESOURCE_WOOD] -= woodCost;
+          resourceCostStr = `${woodCost} Wood (Global), ${crewCost} Crew, ${mpCost} MP`;
+        } else if (faction === CONSTS.FACTION_AI) {
+          woodCost = CONSTS.AI_OUTPOST_BUILD_WOOD_COST;
+          crewCost = CONSTS.AI_OUTPOST_BUILD_CREW_COST;
+          mpCost = CONSTS.AI_OUTPOST_BUILD_MP_COST;
+          initialColonyCrew = crewCost;
+
+          if (mpCost > ship.movesLeft) { addToLog(`AI Build failed: Insufficient MP. Needs ${mpCost}, Has ${ship.movesLeft}.`, logPrefix); return currentShipIdx; }
+          if (ship.crew < crewCost) { addToLog(`AI Build failed: Insufficient Crew. Needs ${crewCost}, Has ${ship.crew}.`, logPrefix); return currentShipIdx; }
+          if ((ship.cargo[CONSTS.RESOURCE_WOOD] || 0) < woodCost) { addToLog(`AI Build failed: Insufficient Wood in cargo. Needs ${woodCost}, Has ${ship.cargo[CONSTS.RESOURCE_WOOD] || 0}.`, logPrefix); return currentShipIdx; }
+
+          ship.cargo[CONSTS.RESOURCE_WOOD] -= woodCost;
+          resourceCostStr = `${woodCost} Wood (Ship), ${crewCost} Crew, ${mpCost} MP`;
+        } else {
+          addToLog(`Build failed: Unknown faction "${faction}".`, logPrefix); return currentShipIdx;
+        }
+
+        ship.movesLeft -= mpCost;
+        ship.crew -= crewCost;
+
+        const newColonyName = generateColonyName(faction);
+        targetHex.colony = {
+            name: newColonyName,
+            stock: { [CONSTS.RESOURCE_WHEAT]: 0, [CONSTS.RESOURCE_WOOD]: 0, [CONSTS.RESOURCE_GOLD]: 0 },
+            crew: initialColonyCrew,
+            faction: faction,
+            q: targetHex.q,
+            r: targetHex.r
+        };
+
+        if (faction === CONSTS.FACTION_PLAYER) {
+            targetHex.colony.maxStockCommon = 700;
+            targetHex.colony.maxStockRare = 70;
+            targetHex.colony.generatesGold = 1;
+            addToLog(`   Player Outpost "${newColonyName}" established with storage and gold generation.`, logPrefix);
+        }
+        addToLog(`Order ${order.id}: Ship ${ship.id} founded colony "${newColonyName}" at ${targetCoordsLabel} (Cost: ${resourceCostStr}. MP left ${ship.movesLeft})`, logPrefix);
+        break;
+      } case 'Forage': { if (!targetHex.forageable) { addToLog(`Forage failed: Not forageable terrain.`, logPrefix); return currentShipIdx; } if (CONSTS.FORAGE_MP_COST > ship.movesLeft) { addToLog(`Forage failed: Insufficient MP.`, logPrefix); return currentShipIdx; } const resourceType = (targetHex.terrain === TerrainType.FOREST) ? CONSTS.RESOURCE_WOOD : CONSTS.RESOURCE_WHEAT; let yieldAmount = Math.floor(random(1, 4)); const totalCargoNow = Object.values(ship.cargo).reduce((a,b)=>a+b,0); const spaceAvailable = CONSTS.SHIP_MAX_CARGO - totalCargoNow; const actualAmount = Math.max(0, Math.min(yieldAmount, spaceAvailable)); ship.movesLeft -= CONSTS.FORAGE_MP_COST; if (actualAmount > 0) { ship.cargo[resourceType] = (ship.cargo[resourceType]||0) + actualAmount; addToLog(`Order ${order.id}: Ship ${ship.id} foraged ${actualAmount} ${resourceType} at ${targetCoordsLabel} (Cost ${CONSTS.FORAGE_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); if (yieldAmount > actualAmount) { addToLog(`   (Cargo capacity reached)`, logPrefix); } } else { addToLog(`Order ${order.id}: Ship ${ship.id} attempted forage at ${targetCoordsLabel}, but cargo full. MP Spent. (MP left ${ship.movesLeft}).`, logPrefix); } break; } case 'Trade': { const market = targetHex.market; if (!market) { addToLog(`Trade failed: No market.`, logPrefix); return currentShipIdx; } if (CONSTS.TRADE_MP_COST > ship.movesLeft) { addToLog(`Trade failed: Insufficient MP.`, logPrefix); return currentShipIdx; } ship.movesLeft -= CONSTS.TRADE_MP_COST; let action = null; let resource = null; let amount = 1; if (faction === CONSTS.FACTION_AI && order.action && order.resource) { action = order.action; resource = order.resource; amount = order.amount || 1; } else { if (ship.cargo[CONSTS.RESOURCE_GOLD] >= market.buy[CONSTS.RESOURCE_WHEAT] && (ship.cargo[CONSTS.RESOURCE_WHEAT]||0) < CONSTS.SHIP_MAX_CARGO) { action = 'Buy'; resource = CONSTS.RESOURCE_WHEAT; amount = 1; } else if ((ship.cargo[CONSTS.RESOURCE_WHEAT]||0) > 0 && market.sell[CONSTS.RESOURCE_WHEAT] > 0) { action = 'Sell'; resource = CONSTS.RESOURCE_WHEAT; amount = 1; } } if (action && resource && market.buy[resource] !== null && market.sell[resource] !== null) { if (action === 'Buy') { const cost = market.buy[resource] * amount; const canAfford = ship.cargo[CONSTS.RESOURCE_GOLD] >= cost; const totalCargoNow = Object.values(ship.cargo).reduce((a,b)=>a+b,0) - (ship.cargo[resource]||0); const hasSpace = (totalCargoNow + amount) <= CONSTS.SHIP_MAX_CARGO; if (canAfford && hasSpace) { ship.cargo[resource] = (ship.cargo[resource]||0) + amount; ship.cargo[CONSTS.RESOURCE_GOLD] -= cost; addToLog(`Order ${order.id}: Ship ${ship.id} bought ${amount} ${resource} for ${cost} ${CONSTS.RESOURCE_GOLD} at ${targetCoordsLabel}.`, logPrefix); } else { addToLog(`Trade (Buy ${resource}) failed (Afford: ${canAfford}, Space: ${hasSpace}).`, logPrefix); } } else if (action === 'Sell') { const hasResource = (ship.cargo[resource]||0) >= amount; const canSell = market.sell[resource] > 0; if (hasResource && canSell) { const earnings = market.sell[resource] * amount; ship.cargo[resource] -= amount; ship.cargo[CONSTS.RESOURCE_GOLD] += earnings; addToLog(`Order ${order.id}: Ship ${ship.id} sold ${amount} ${resource} for ${earnings} ${CONSTS.RESOURCE_GOLD} at ${targetCoordsLabel}.`, logPrefix); } else { addToLog(`Trade (Sell ${resource}) failed (Have: ${hasResource}, Market Buys: ${canSell}).`, logPrefix); } } } else { addToLog(`Trade attempt at ${targetCoordsLabel}, no valid transaction. MP Spent.`, logPrefix); } addToLog(`   (MP left ${ship.movesLeft})`, logPrefix); break; } default: addToLog(`Order ${order.id} skipped: Unknown order type "${order.type}".`, logPrefix); } return currentShipIdx; }
+      function performColonyUpkeep() {
+        addToLog("--- Colony Upkeep Phase ---", "System");
+        const allColonies = hexes.filter(h => h && h.colony);
+        if (allColonies.length === 0) {
+          addToLog("No colonies present for upkeep.", "System");
+          return;
+        }
+
+        let playerColoniesProcessed = 0;
+        let aiColoniesProcessed = 0;
+
+        allColonies.forEach(h => {
+          const colony = h.colony;
+          const colonyName = `Colony "${colony.name}" at (${h.q}, ${h.r})`;
+
+          if (colony.faction === CONSTS.FACTION_PLAYER) {
+            playerColoniesProcessed++;
+            addToLog(`Processing upkeep for Player ${colonyName}...`);
+
+            // Wood Upkeep (Player)
+            if (gameState.resources[CONSTS.RESOURCE_WOOD] >= CONSTS.OUTPOST_UPKEEP_WOOD_COST) {
+              gameState.resources[CONSTS.RESOURCE_WOOD] -= CONSTS.OUTPOST_UPKEEP_WOOD_COST;
+              addToLog(`  ${colonyName} paid ${CONSTS.OUTPOST_UPKEEP_WOOD_COST} Wood from Global. Global Wood: ${gameState.resources[CONSTS.RESOURCE_WOOD]}.`);
+            } else {
+              addToLog(`  ${colonyName}: Insufficient Global Wood for upkeep (Needs ${CONSTS.OUTPOST_UPKEEP_WOOD_COST}, Has ${gameState.resources[CONSTS.RESOURCE_WOOD]}).`, "System");
+            }
+
+            // Crew Upkeep (Player)
+            if (colony.crew >= CONSTS.OUTPOST_UPKEEP_CREW_COST) {
+              colony.crew -= CONSTS.OUTPOST_UPKEEP_CREW_COST;
+              addToLog(`  ${colonyName} paid ${CONSTS.OUTPOST_UPKEEP_CREW_COST} Crew. Crew remaining: ${colony.crew}.`);
+              if (colony.crew <= 0) {
+                addToLog(`  ${colonyName} has no crew left and is abandoned!`, "System");
+                h.colony = null;
+                return;
+              }
+            } else {
+              addToLog(`  ${colonyName}: Insufficient Crew for upkeep (Needs ${CONSTS.OUTPOST_UPKEEP_CREW_COST}, Has ${colony.crew}). Colony may suffer.`, "System");
+            }
+
+            // Gold/Food Upkeep (Player)
+            let playerGoldFoodCost = CONSTS.OUTPOST_UPKEEP_GOLD_FOOD_COST;
+            let playerPaidByGold = 0;
+            let playerPaidByWheat = 0;
+
+            if (gameState.resources[CONSTS.RESOURCE_GOLD] >= playerGoldFoodCost) {
+              gameState.resources[CONSTS.RESOURCE_GOLD] -= playerGoldFoodCost;
+              playerPaidByGold = playerGoldFoodCost;
+              playerGoldFoodCost = 0;
+            } else if (gameState.resources[CONSTS.RESOURCE_GOLD] > 0) {
+              playerPaidByGold = gameState.resources[CONSTS.RESOURCE_GOLD];
+              playerGoldFoodCost -= gameState.resources[CONSTS.RESOURCE_GOLD];
+              gameState.resources[CONSTS.RESOURCE_GOLD] = 0;
+            }
+
+            if (playerGoldFoodCost > 0) {
+              if (gameState.resources[CONSTS.RESOURCE_WHEAT] >= playerGoldFoodCost) {
+                gameState.resources[CONSTS.RESOURCE_WHEAT] -= playerGoldFoodCost;
+                playerPaidByWheat = playerGoldFoodCost;
+                playerGoldFoodCost = 0;
+              } else if (gameState.resources[CONSTS.RESOURCE_WHEAT] > 0) {
+                playerPaidByWheat = gameState.resources[CONSTS.RESOURCE_WHEAT];
+                playerGoldFoodCost -= gameState.resources[CONSTS.RESOURCE_WHEAT];
+                gameState.resources[CONSTS.RESOURCE_WHEAT] = 0;
+              }
+            }
+
+            if (playerPaidByGold > 0) addToLog(`  ${colonyName} paid ${playerPaidByGold} Gold from Global. Global Gold: ${gameState.resources[CONSTS.RESOURCE_GOLD]}.`);
+            if (playerPaidByWheat > 0) addToLog(`  ${colonyName} paid ${playerPaidByWheat} Wheat from Global. Global Wheat: ${gameState.resources[CONSTS.RESOURCE_WHEAT]}.`);
+            if (playerGoldFoodCost > 0) addToLog(`  ${colonyName}: Failed to pay ${playerGoldFoodCost} Gold/Wheat for upkeep from Global.`, "System");
+
+          } else if (colony.faction === CONSTS.FACTION_AI) {
+            aiColoniesProcessed++;
+            addToLog(`Processing upkeep for AI ${colonyName}...`, CONSTS.FACTION_AI);
+
+            // Wood Upkeep (AI) - from colony stock
+            if (colony.stock[CONSTS.RESOURCE_WOOD] >= CONSTS.AI_OUTPOST_UPKEEP_WOOD_COST) {
+              colony.stock[CONSTS.RESOURCE_WOOD] -= CONSTS.AI_OUTPOST_UPKEEP_WOOD_COST;
+              addToLog(`  AI ${colonyName} paid ${CONSTS.AI_OUTPOST_UPKEEP_WOOD_COST} Wood from Stock. Stock Wood: ${colony.stock[CONSTS.RESOURCE_WOOD]}.`, CONSTS.FACTION_AI);
+            } else {
+              addToLog(`  AI ${colonyName}: Insufficient Stock Wood (Needs ${CONSTS.AI_OUTPOST_UPKEEP_WOOD_COST}, Has ${colony.stock[CONSTS.RESOURCE_WOOD] || 0}). AI covers globally.`, CONSTS.FACTION_AI);
+            }
+
+            // Crew Upkeep (AI)
+            if (colony.crew >= CONSTS.AI_OUTPOST_UPKEEP_CREW_COST) {
+              colony.crew -= CONSTS.AI_OUTPOST_UPKEEP_CREW_COST;
+              addToLog(`  AI ${colonyName} paid ${CONSTS.AI_OUTPOST_UPKEEP_CREW_COST} Crew. Crew remaining: ${colony.crew}.`, CONSTS.FACTION_AI);
+              if (colony.crew <= 0) {
+                addToLog(`  AI ${colonyName} has no crew left and is abandoned!`, CONSTS.FACTION_AI);
+                h.colony = null;
+                return;
+              }
+            } else {
+              addToLog(`  AI ${colonyName}: Insufficient Crew for upkeep (Needs ${CONSTS.AI_OUTPOST_UPKEEP_CREW_COST}, Has ${colony.crew}). Colony may suffer.`, CONSTS.FACTION_AI);
+            }
+
+            // Gold/Food Upkeep (AI) - from colony stock
+            let aiGoldFoodCost = CONSTS.AI_OUTPOST_UPKEEP_GOLD_FOOD_COST;
+            let aiPaidByGold = 0;
+            let aiPaidByWheat = 0;
+
+            if ((colony.stock[CONSTS.RESOURCE_GOLD] || 0) >= aiGoldFoodCost) {
+              colony.stock[CONSTS.RESOURCE_GOLD] -= aiGoldFoodCost;
+              aiPaidByGold = aiGoldFoodCost;
+              aiGoldFoodCost = 0;
+            } else if ((colony.stock[CONSTS.RESOURCE_GOLD] || 0) > 0) {
+              aiPaidByGold = colony.stock[CONSTS.RESOURCE_GOLD];
+              aiGoldFoodCost -= colony.stock[CONSTS.RESOURCE_GOLD];
+              colony.stock[CONSTS.RESOURCE_GOLD] = 0;
+            }
+
+            if (aiGoldFoodCost > 0) {
+              if ((colony.stock[CONSTS.RESOURCE_WHEAT] || 0) >= aiGoldFoodCost) {
+                colony.stock[CONSTS.RESOURCE_WHEAT] -= aiGoldFoodCost;
+                aiPaidByWheat = aiGoldFoodCost;
+                aiGoldFoodCost = 0;
+              } else if ((colony.stock[CONSTS.RESOURCE_WHEAT] || 0) > 0) {
+                aiPaidByWheat = colony.stock[CONSTS.RESOURCE_WHEAT];
+                aiGoldFoodCost -= colony.stock[CONSTS.RESOURCE_WHEAT];
+                colony.stock[CONSTS.RESOURCE_WHEAT] = 0;
+              }
+            }
+            if (aiPaidByGold > 0) addToLog(`  AI ${colonyName} paid ${aiPaidByGold} Gold from Stock. Stock Gold: ${colony.stock[CONSTS.RESOURCE_GOLD]}.`, CONSTS.FACTION_AI);
+            if (aiPaidByWheat > 0) addToLog(`  AI ${colonyName} paid ${aiPaidByWheat} Wheat from Stock. Stock Wheat: ${colony.stock[CONSTS.RESOURCE_WHEAT]}.`, CONSTS.FACTION_AI);
+            if (aiGoldFoodCost > 0) addToLog(`  AI ${colonyName}: Failed to pay ${aiGoldFoodCost} Gold/Wheat for upkeep from Stock. AI covers globally.`, CONSTS.FACTION_AI);
+          }
+        });
+
+        if (playerColoniesProcessed === 0) {
+          addToLog("No player colonies to process upkeep for.", "System");
+        }
+        if (aiColoniesProcessed === 0) {
+          addToLog("No AI colonies to process upkeep for.", "System");
+        }
+        addToLog("--- Colony Upkeep Phase Complete ---", "System");
+      }
+
       function performShipColonyTransfer() { if ((!gameState.playerShip && gameState.aiShips.length === 0) || !hexes.some(h => h && h.colony)) return; addToLog("Performing Ship->Colony transfers...", "System"); let transferOccurred = false; if (gameState.playerShip) { const ship = gameState.playerShip; const currentShipIdx = axialToIndex(ship.q, ship.r); if (currentShipIdx !== null) { const endTurnHex = hexes[currentShipIdx]; if (endTurnHex && endTurnHex.colony && endTurnHex.colony.faction === CONSTS.FACTION_PLAYER) { const colony = endTurnHex.colony; const transferLimit = 5; const wheatToTransfer = Math.min(transferLimit, ship.cargo[CONSTS.RESOURCE_WHEAT]||0); if (wheatToTransfer > 0) { colony.stock[CONSTS.RESOURCE_WHEAT] = (colony.stock[CONSTS.RESOURCE_WHEAT]||0) + wheatToTransfer; ship.cargo[CONSTS.RESOURCE_WHEAT] -= wheatToTransfer; addToLog(`Ship ${ship.id} transferred ${wheatToTransfer} ${CONSTS.RESOURCE_WHEAT} to colony "${colony.name}".`); transferOccurred = true; } const woodToTransfer = Math.min(transferLimit, ship.cargo[CONSTS.RESOURCE_WOOD]||0); if (woodToTransfer > 0) { colony.stock[CONSTS.RESOURCE_WOOD] = (colony.stock[CONSTS.RESOURCE_WOOD]||0) + woodToTransfer; ship.cargo[CONSTS.RESOURCE_WOOD] -= woodToTransfer; addToLog(`Ship ${ship.id} transferred ${woodToTransfer} ${CONSTS.RESOURCE_WOOD} to colony "${colony.name}".`); transferOccurred = true; } } } } gameState.aiShips.forEach(ship => { const currentShipIdx = axialToIndex(ship.q, ship.r); if (currentShipIdx !== null) { const endTurnHex = hexes[currentShipIdx]; if (endTurnHex && endTurnHex.colony && endTurnHex.colony.faction === CONSTS.FACTION_AI) { const colony = endTurnHex.colony; const transferLimit = 5; const wheatToTransfer = Math.min(transferLimit, ship.cargo[CONSTS.RESOURCE_WHEAT]||0); if (wheatToTransfer > 0) { colony.stock[CONSTS.RESOURCE_WHEAT] = (colony.stock[CONSTS.RESOURCE_WHEAT]||0) + wheatToTransfer; ship.cargo[CONSTS.RESOURCE_WHEAT] -= wheatToTransfer; addToLog(`AI Ship ${ship.id} transferred ${wheatToTransfer} ${CONSTS.RESOURCE_WHEAT} to colony "${colony.name}".`, CONSTS.FACTION_AI); transferOccurred = true; } const woodToTransfer = Math.min(transferLimit, ship.cargo[CONSTS.RESOURCE_WOOD]||0); if (woodToTransfer > 0) { colony.stock[CONSTS.RESOURCE_WOOD] = (colony.stock[CONSTS.RESOURCE_WOOD]||0) + woodToTransfer; ship.cargo[CONSTS.RESOURCE_WOOD] -= woodToTransfer; addToLog(`AI Ship ${ship.id} transferred ${woodToTransfer} ${CONSTS.RESOURCE_WOOD} to colony "${colony.name}".`, CONSTS.FACTION_AI); transferOccurred = true; } } } }); if (!transferOccurred) { addToLog("No ship-colony transfers occurred.", "System"); } }
       function applyHazards() { if (gameState.activeHazards.length === 0) return; addToLog("Applying Hazard effects...", "System"); const remainingHazards = []; let hazardEffectsApplied = false; gameState.activeHazards.forEach(hazard => { hazard.ttl--; if (hazard.ttl <= 0) { addToLog(`Hazard ${hazard.kind} at (${hexes[hazard.idx].q}, ${hexes[hazard.idx].r}) dissipated.`, "System"); return; } if (gameState.playerShip) { const playerIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r); if (playerIdx === hazard.idx) { applyHazardEffect(gameState.playerShip, hazard); hazardEffectsApplied = true; } } gameState.aiShips.forEach(aiShip => { const aiIdx = axialToIndex(aiShip.q, aiShip.r); if (aiIdx === hazard.idx) { applyHazardEffect(aiShip, hazard); hazardEffectsApplied = true; } }); remainingHazards.push(hazard); }); gameState.activeHazards = remainingHazards; if (!hazardEffectsApplied) { addToLog("No ships were affected by hazards this turn.", "System"); } }
       function applyHazardEffect(ship, hazard) { if (!ship.status) ship.status = {}; const logPrefix = ship.faction === CONSTS.FACTION_AI ? CONSTS.FACTION_AI : CONSTS.FACTION_PLAYER; if (hazard.kind === 'Storm') { ship.status.stormPenaltyNextTurn = true; addToLog(`Ship ${ship.id} caught in ${hazard.kind} at (${hexes[hazard.idx].q}, ${hexes[hazard.idx].r})! (-1 MP next turn).`, logPrefix); } else if (hazard.kind === 'Reef') { if (random() < 0.3) { ship.status.leak = (ship.status.leak || 0) + 1; addToLog(`Ship ${ship.id} struck a reef at (${hexes[hazard.idx].q}, ${hexes[hazard.idx].r})! Hull damaged (Leaking).`, logPrefix); } else { addToLog(`Ship ${ship.id} navigated the reef at (${hexes[hazard.idx].q}, ${hexes[hazard.idx].r}) safely.`, logPrefix); } } else if (hazard.kind === 'Pirates') { const goldLoss = Math.min(ship.cargo[CONSTS.RESOURCE_GOLD], Math.floor(random(1, 6))); if (goldLoss > 0) { ship.cargo[CONSTS.RESOURCE_GOLD] -= goldLoss; addToLog(`Ship ${ship.id} ambushed by pirates at (${hexes[hazard.idx].q}, ${hexes[hazard.idx].r})! Lost ${goldLoss} ${CONSTS.RESOURCE_GOLD}.`, logPrefix); } else { addToLog(`Ship ${ship.id} encountered pirates at (${hexes[hazard.idx].q}, ${hexes[hazard.idx].r}) but had nothing to steal.`, logPrefix); } } }
@@ -434,7 +629,87 @@
       function updateShipStatuses() { if (!gameState.playerShip && gameState.aiShips.length === 0) return; addToLog("Updating ship statuses...", "System"); let statusChanged = false; const processShipStatus = (ship) => { if (!ship.status) return; const logPrefix = ship.faction === CONSTS.FACTION_AI ? CONSTS.FACTION_AI : CONSTS.FACTION_PLAYER; if (ship.status.crewSick > 0) { ship.status.crewSick--; statusChanged = true; if (ship.status.crewSick === 0) { addToLog(`Ship ${ship.id} crew sickness subsided.`, logPrefix); delete ship.status.crewSick; } } if (ship.status.leak > 0) { ship.status.leak--; statusChanged = true; addToLog(`Ship ${ship.id} continues leaking...`, logPrefix); if (ship.status.leak === 0) { addToLog(`Ship ${ship.id} hull leak repaired.`, logPrefix); delete ship.status.leak; } } }; if(gameState.playerShip) processShipStatus(gameState.playerShip); gameState.aiShips.forEach(processShipStatus); if (!statusChanged) { addToLog("No ship status changes.", "System"); } }
       function checkForSpontaneousCombat() { if (gameState.combat || !gameState.playerShip) return false; const playerShip = gameState.playerShip; const playerHex = indexToAxial(axialToIndex(playerShip.q, playerShip.r)); if (!playerHex) return false; for (const aiShip of gameState.aiShips) { const aiHex = indexToAxial(axialToIndex(aiShip.q, aiShip.r)); if (!aiHex) continue; if (axialDistance(playerHex, aiHex) === 1) { addToLog(`Spontaneous combat: Player Ship ${playerShip.id} vs AI Ship ${aiShip.id}`, "Combat"); enterCombat(playerShip, aiShip, CONSTS.COMBAT_CONTEXT_SHIP_VS_SHIP); return true; } } return false; }
       function endTurn() { if (isEventModalOpen || gameState.combat || gameState.isTurnProcessingPausedForCombat) { addToLog("Cannot end turn: Event modal, combat in progress, or turn processing paused.", "System"); return; } select('#endTurnBtn').elt.disabled = true; menuOpen = false; selectedIdx = null; currentPathPreview = null; addToLog(`--- Player Ending Turn ${gameState.turnCount} ---`, "System"); planAITurn(); executeAllTurnOrders(); if (gameState.combat) { gameState.isTurnProcessingPausedForCombat = true; gameState.postCombatTurnResumeCallback = resumeEndTurnSequenceAfterCombat; addToLog("Turn processing paused for combat (initiated by order).", "System"); return; } if (checkForSpontaneousCombat()) { gameState.isTurnProcessingPausedForCombat = true; gameState.postCombatTurnResumeCallback = resumeEndTurnSequenceAfterCombat; addToLog("Turn processing paused for combat (spontaneous).", "System"); return; } resumeEndTurnSequenceAfterCombat(); }
-      function resumeEndTurnSequenceAfterCombat() { gameState.isTurnProcessingPausedForCombat = false; gameState.postCombatTurnResumeCallback = null; if (gameState.combat) { addToLog("Error: Trying to resume turn sequence while still in combat.", "System"); return; } addToLog("Resuming end of turn sequence (hazards, upkeep, events, MP reset)...", "System"); applyHazards(); performColonyUpkeep(); performShipColonyTransfer(); updateShipStatuses(); gameState.turnCount++; const applyMPModifiers = (ship) => { let baseMP = CONSTS.MOVE_POINTS_PER_TURN; let mpMod = 0; let reason = []; if (!ship.status) ship.status = {}; if (ship.status.stormPenaltyNextTurn) { mpMod -= 1; reason.push("Storm"); delete ship.status.stormPenaltyNextTurn; } if (ship.status.crewSick > 0) { mpMod -= 1; reason.push("Sickness"); } if (ship.status.leak > 0) { mpMod -= 1; reason.push("Leak"); } if (ship.status.windBoost > 0) { mpMod += ship.status.windBoost; reason.push(`Wind (+${ship.status.windBoost})`); delete ship.status.windBoost; } ship.movesLeft = Math.max(1, baseMP + mpMod); if (mpMod !== 0) { addToLog(`Ship ${ship.id} MP modified for Turn ${gameState.turnCount} due to: ${reason.join(', ')}. MP: ${ship.movesLeft}/${baseMP}`, ship.faction); } else { ship.movesLeft = baseMP; } }; if (gameState.playerShip) { applyMPModifiers(gameState.playerShip); } gameState.aiShips.forEach(applyMPModifiers); if (gameState.playerShip) { reachableSet = computeReachable(gameState.playerShip.q, gameState.playerShip.r, gameState.playerShip.movesLeft); } else { reachableSet.clear(); visibleReachableSet.clear(); } updateVisibility(); const playerMPStr = gameState.playerShip ? `${gameState.playerShip.movesLeft}/${CONSTS.MOVE_POINTS_PER_TURN}` : '-/-'; addToLog(`--- Starting Turn ${gameState.turnCount}. Player MP: ${playerMPStr} ---`, "System"); processEventPhase(); }
+      function resumeEndTurnSequenceAfterCombat() {
+        gameState.isTurnProcessingPausedForCombat = false;
+        gameState.postCombatTurnResumeCallback = null;
+        if (gameState.combat) {
+          addToLog("Error: Trying to resume turn sequence while still in combat.", "System");
+          return;
+        }
+        addToLog("Resuming end of turn sequence (hazards, upkeep, benefits, events, MP reset)...", "System");
+        applyHazards();
+        performColonyUpkeep();
+        performShipColonyTransfer();
+        applyColonyBonusesAndHealing(); // New function call
+        updateShipStatuses();
+        gameState.turnCount++;
+        const applyMPModifiers = (ship) => {
+          let baseMP = CONSTS.MOVE_POINTS_PER_TURN;
+          let mpMod = 0;
+          let reason = [];
+          if (!ship.status) ship.status = {};
+          if (ship.status.stormPenaltyNextTurn) { mpMod -= 1; reason.push("Storm"); delete ship.status.stormPenaltyNextTurn; }
+          if (ship.status.crewSick > 0) { mpMod -= 1; reason.push("Sickness"); }
+          if (ship.status.leak > 0) { mpMod -= 1; reason.push("Leak"); }
+          if (ship.status.windBoost > 0) { mpMod += ship.status.windBoost; reason.push(`Wind (+${ship.status.windBoost})`); delete ship.status.windBoost; }
+          ship.movesLeft = Math.max(1, baseMP + mpMod);
+          if (mpMod !== 0) {
+            addToLog(`Ship ${ship.id} MP modified for Turn ${gameState.turnCount} due to: ${reason.join(', ')}. MP: ${ship.movesLeft}/${baseMP}`, ship.faction);
+          } else {
+            ship.movesLeft = baseMP;
+          }
+        };
+        if (gameState.playerShip) { applyMPModifiers(gameState.playerShip); }
+        gameState.aiShips.forEach(applyMPModifiers);
+        if (gameState.playerShip) {
+          reachableSet = computeReachable(gameState.playerShip.q, gameState.playerShip.r, gameState.playerShip.movesLeft);
+        } else {
+          reachableSet.clear();
+          visibleReachableSet.clear();
+        }
+        updateVisibility();
+        const playerMPStr = gameState.playerShip ? `${gameState.playerShip.movesLeft}/${CONSTS.MOVE_POINTS_PER_TURN}` : '-/-';
+        addToLog(`--- Starting Turn ${gameState.turnCount}. Player MP: ${playerMPStr} ---`, "System");
+        processEventPhase();
+      }
+
+      function applyColonyBonusesAndHealing() {
+        addToLog("--- Applying Colony Bonuses & Healing ---", "System");
+        let goldGenerated = 0;
+
+        // Player Colony Gold Generation
+        hexes.forEach(h => {
+          if (h.colony && h.colony.faction === CONSTS.FACTION_PLAYER && h.colony.generatesGold) {
+            const goldAmount = h.colony.generatesGold;
+            gameState.resources[CONSTS.RESOURCE_GOLD] += goldAmount;
+            goldGenerated += goldAmount;
+            addToLog(`Player Outpost "${h.colony.name}" generated ${goldAmount} Gold.`);
+          }
+        });
+        if (goldGenerated > 0) {
+          addToLog(`Total Gold generated by Player Outposts: ${goldGenerated}. Global Gold: ${gameState.resources[CONSTS.RESOURCE_GOLD]}.`);
+        } else {
+          addToLog("No Player Outposts generated Gold this turn.", "System");
+        }
+
+        // Player Ship Healing at Player Outposts
+        if (gameState.playerShip && gameState.playerShip.hp < gameState.playerShip.maxHp) {
+          const shipHex = hexes[axialToIndex(gameState.playerShip.q, gameState.playerShip.r)];
+          if (shipHex && shipHex.colony && shipHex.colony.faction === CONSTS.FACTION_PLAYER) {
+            const healAmount = Math.floor(gameState.playerShip.maxHp * CONSTS.OUTPOST_HEAL_RATE);
+            if (healAmount > 0) {
+              const oldHp = gameState.playerShip.hp;
+              gameState.playerShip.hp = Math.min(gameState.playerShip.maxHp, gameState.playerShip.hp + healAmount);
+              const healedBy = gameState.playerShip.hp - oldHp;
+              if (healedBy > 0) {
+                 addToLog(`Player Ship ${gameState.playerShip.id} healed ${healedBy} HP at Outpost "${shipHex.colony.name}". HP: ${gameState.playerShip.hp}/${gameState.playerShip.maxHp}`);
+              }
+            }
+          }
+        }
+        // Note: AI ship healing at AI outposts is not implemented as per current subtask focus.
+         addToLog("--- Colony Bonuses & Healing Phase Complete ---", "System");
+      }
 
       /* ========================================================== TACTICAL COMBAT ========================================================== */
       function initCombatBoard(attackerEntity, defenderEntity, context) { const board = Array(CONSTS.COMBAT_GRID_DIM).fill(null).map(() => Array(CONSTS.COMBAT_GRID_DIM).fill(null).map(() => ({ terrain: 'Open' }))); const units = []; const combatantsOriginalData = []; const attackerStartY = Math.floor(CONSTS.COMBAT_GRID_DIM / 2) + CONSTS.COMBAT_UNIT_START_Y_OFFSET_FROM_CENTER; const defenderStartY = attackerStartY; units.push({ id: `combatUnit_${attackerEntity.id}`, originalId: attackerEntity.id, originalType: 'SHIP', faction: attackerEntity.faction, hp: CONSTS.COMBAT_DEFAULT_UNIT_HP, x: CONSTS.COMBAT_ATTACKER_START_X_OFFSET, y: attackerStartY, }); combatantsOriginalData.push({ id: attackerEntity.id, type: 'SHIP', q: attackerEntity.q, r: attackerEntity.r, faction: attackerEntity.faction }); const defenderOriginalQ = context === CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY ? defenderEntity.q : defenderEntity.q; const defenderOriginalR = context === CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY ? defenderEntity.r : defenderEntity.r; if (context === CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY) { const colony = defenderEntity.colony; units.push({ id: `combatUnit_colony_${colony.name.replace(/\s+/g, '_')}`, originalId: colony.name, originalType: 'COLONY', faction: colony.faction, hp: CONSTS.COMBAT_DEFAULT_COLONY_HP, x: CONSTS.COMBAT_GRID_DIM - CONSTS.COMBAT_DEFENDER_START_X_OFFSET_FROM_EDGE, y: defenderStartY, }); combatantsOriginalData.push({ id: colony.name, type: 'COLONY', q: defenderOriginalQ, r: defenderOriginalR, faction: colony.faction }); } else { units.push({ id: `combatUnit_${defenderEntity.id}`, originalId: defenderEntity.id, originalType: 'SHIP', faction: defenderEntity.faction, hp: CONSTS.COMBAT_DEFAULT_UNIT_HP, x: CONSTS.COMBAT_GRID_DIM - CONSTS.COMBAT_DEFENDER_START_X_OFFSET_FROM_EDGE, y: defenderStartY, }); combatantsOriginalData.push({ id: defenderEntity.id, type: 'SHIP', q: defenderOriginalQ, r: defenderOriginalR, faction: defenderEntity.faction }); } let turnFaction; let activeUnitIdxLocal; const playerIsAttacker = attackerEntity.faction === CONSTS.FACTION_PLAYER; const defenderFaction = units[1].faction; const playerIsDefender = defenderFaction === CONSTS.FACTION_PLAYER; if (playerIsAttacker || playerIsDefender) { turnFaction = CONSTS.FACTION_PLAYER; activeUnitIdxLocal = playerIsAttacker ? 0 : 1; } else { turnFaction = attackerEntity.faction; activeUnitIdxLocal = 0; } return { board, units, round: 1, turn: turnFaction, context, combatantsOriginalData, awaitingMoveClick: false, activeUnitIndex: activeUnitIdxLocal, gridStartX: (width - CONSTS.COMBAT_GRID_DIM * CONSTS.COMBAT_CELL_PIXEL_SIZE) / 2, gridStartY: (height - CONSTS.COMBAT_GRID_DIM * CONSTS.COMBAT_CELL_PIXEL_SIZE) / 2, }; }
