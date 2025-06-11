@@ -71,7 +71,7 @@
       /* ===== CONSTANTS ===== */
       const CONSTS = {
         SQRT3: Math.sqrt(3), HEX_WIDTH_FACTOR: 1.5, // For flat-topped, this is 3/2 for q-spacing
-        HEX_SIZE: 32, GRID_W: 18, GRID_H: 14, SHIP_RADIUS_FACTOR: 0.6,
+        HEX_SIZE: 32, HEX_SIZE_SQUARED: 32 * 32, GRID_W: 18, GRID_H: 14, SHIP_RADIUS_FACTOR: 0.6,
         MENU_WIDTH: 130, MENU_ITEM_HEIGHT: 26, LOS_RADIUS: 2,
         FOG_ALPHA_PERCENT: 0.75, UNEXPLORED_COLOUR: "#111116",
         LOG_MAX_LINES: 35, HAZARD_ICON_SIZE: 12,
@@ -138,8 +138,14 @@
           resources: { [CONSTS.RESOURCE_WHEAT]: 10, [CONSTS.RESOURCE_WOOD]: 20, [CONSTS.RESOURCE_GOLD]: 0 },
           eventDeck: [], discardPile: [], activeHazards: [], combat: null,
           isTurnProcessingPausedForCombat: false, postCombatTurnResumeCallback: null,
+          gridOffsetX: 0, gridOffsetY: 0, playerColonyIndices: [], coastHexIndices: [],
       };
       let reachableSet = new Set(); visibleReachableSet = new Set(); currentPathPreview = null;
+      let lastPreviewStartIdx = null;
+      let lastPreviewHoverIdx = null;
+      let lastPreviewPlayerMoves = -1;
+      let lastTooltipContent = '';
+      let lastTooltipX = -1, lastTooltipY = -1;
       const actions = ["Sail", "Scout", "Build Outpost", "Forage", "Trade", "Attack"];
       let orderPanel, logPanel, tooltipElement, eventModal, eventModalBackdrop, eventModalTitle, eventModalBody, eventModalButtons;
       let combatUiContainer, combatRoundBanner, combatActionButtonsDiv, combatAttackBtn, combatMoveBtn, combatRetreatBtn;
@@ -158,10 +164,103 @@
       function aStar(startIdx, goalIdx, moveCostLookup) { const startCoords = indexToAxial(startIdx); const goalCoords = indexToAxial(goalIdx); if (!startCoords || !goalCoords || startIdx === null || goalIdx === null) return null; function heuristic(aIdx, bIdx) { const aCoords = indexToAxial(aIdx); const bCoords = indexToAxial(bIdx); if (!aCoords || !bCoords) return Infinity; return axialDistance(aCoords, bCoords); } const openSet = new Map(); openSet.set(startIdx, heuristic(startIdx, goalIdx)); const cameFrom = new Map(); const gScore = new Map(); hexes.forEach((_, idx) => gScore.set(idx, Infinity)); gScore.set(startIdx, 0); while (openSet.size > 0) { let currentIdx = -1; let lowestFScore = Infinity; for (const [idx, score] of openSet.entries()) { if (score < lowestFScore) { lowestFScore = score; currentIdx = idx; } } if (currentIdx === goalIdx) { const path = []; let tempIdx = goalIdx; while (tempIdx !== startIdx) { path.push(tempIdx); tempIdx = cameFrom.get(tempIdx); if (!tempIdx && tempIdx !== 0) { console.error("A* Path reconstruction failed!"); return null; } } path.reverse(); return { path: path, cost: gScore.get(goalIdx) }; } openSet.delete(currentIdx); const currentCoords = indexToAxial(currentIdx); if (!currentCoords) continue; const neighborsCoords = axialNeighbors(currentCoords.q, currentCoords.r); for (const nCoords of neighborsCoords) { const neighborIdx = axialToIndex(nCoords.q, nCoords.r); if (neighborIdx === null || !hexes[neighborIdx]) continue; const terrain = hexes[neighborIdx].terrain; const costToNeighbor = moveCostLookup[terrain] ?? CONSTS.DEFAULT_MOVE_COST; if (costToNeighbor >= 999) continue; const tentativeGScore = (gScore.get(currentIdx) ?? Infinity) + costToNeighbor; if (tentativeGScore < (gScore.get(neighborIdx) ?? Infinity)) { cameFrom.set(neighborIdx, currentIdx); gScore.set(neighborIdx, tentativeGScore); const fScore = tentativeGScore + heuristic(neighborIdx, goalIdx); openSet.set(neighborIdx, fScore); } } } return null; }
       function computeReachable(startQ, startR, mpLeft) { const startIdx = axialToIndex(startQ, startR); if (startIdx === null || mpLeft <= 0) return new Set(); const frontier = [{ idx: startIdx, cost: 0 }]; const visited = new Map(); visited.set(startIdx, 0); const reachable = new Set(); let head = 0; while(head < frontier.length) { const current = frontier[head++]; const currentCoords = indexToAxial(current.idx); if (!currentCoords) continue; const neighbors = axialNeighbors(currentCoords.q, currentCoords.r); for (const neighborCoords of neighbors) { const neighborIdx = axialToIndex(neighborCoords.q, neighborCoords.r); if (neighborIdx === null || !hexes[neighborIdx]) continue; const moveCost = MOVE_COST[hexes[neighborIdx].terrain] ?? CONSTS.DEFAULT_MOVE_COST; if (moveCost >= 999) continue; const newCost = current.cost + moveCost; if (newCost <= mpLeft) { if (!visited.has(neighborIdx) || newCost < visited.get(neighborIdx)) { visited.set(neighborIdx, newCost); frontier.push({ idx: neighborIdx, cost: newCost }); reachable.add(neighborIdx); } } } } return reachable; }
       function* spiral(q0, r0, radius) { for (let dq = -radius; dq <= radius; dq++) { for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++) { const q = q0 + dq; const r = r0 + dr; const idx = axialToIndex(q, r); if (idx !== null && hexes[idx]) { yield idx; } } } }
-      function updateVisibility() { hexes.forEach(h => { if(h) h.isVisible = false; }); if (!gameState.playerShip) { visibleReachableSet.clear(); return; } const shipQ = gameState.playerShip.q; const shipR = gameState.playerShip.r; for (const idx of spiral(shipQ, shipR, CONSTS.LOS_RADIUS)) { if (hexes[idx]) { hexes[idx].isVisible = true; hexes[idx].isExplored = true; } } hexes.forEach(h => { if(h && h.colony && h.colony.faction === CONSTS.FACTION_PLAYER){ for (const idx of spiral(h.q, h.r, 1)) { if (hexes[idx]) { hexes[idx].isVisible = true; hexes[idx].isExplored = true; } } } }); visibleReachableSet.clear(); reachableSet.forEach(idx => { if (hexes[idx]?.isVisible) { visibleReachableSet.add(idx); } }); }
+      function updateVisibility() {
+        hexes.forEach(h => { if (h) h.isVisible = false; });
+
+        if (gameState.playerShip) {
+          const shipQ = gameState.playerShip.q;
+          const shipR = gameState.playerShip.r;
+          for (const idx of spiral(shipQ, shipR, CONSTS.LOS_RADIUS)) {
+            if (hexes[idx]) {
+              hexes[idx].isVisible = true;
+              hexes[idx].isExplored = true;
+            }
+          }
+        }
+
+        if (gameState.playerColonyIndices) {
+          gameState.playerColonyIndices.forEach(colonyIdx => {
+            const colonyHex = hexes[colonyIdx];
+            if (colonyHex && colonyHex.colony) { // Ensure colony still exists
+              for (const idx of spiral(colonyHex.q, colonyHex.r, 1)) { // Assuming colony LOS is 1
+                if (hexes[idx]) {
+                  hexes[idx].isVisible = true;
+                  hexes[idx].isExplored = true;
+                }
+              }
+            }
+          });
+        }
+
+        visibleReachableSet.clear();
+        if (gameState.playerShip) { // Only compute if player ship exists
+            reachableSet.forEach(idx => {
+                if (hexes[idx]?.isVisible) {
+                    visibleReachableSet.add(idx);
+                }
+            });
+        }
+      }
       function drawHex(cx, cy) { beginShape(); for (let i = 0; i < 6; i++) { const a = PI / 3 * i; vertex(cx + CONSTS.HEX_SIZE * cos(a), cy + CONSTS.HEX_SIZE * sin(a)); } endShape(CLOSE); }
-      function pointInHex(px, py, h) { if (!h) return false; return dist(px, py, h.x, h.y) <= CONSTS.HEX_SIZE; }
-      function getHexUnderMouse() { if (gameState.combat) return null; for (let i = 0; i < hexes.length; i++) { if (hexes[i]?.isVisible && pointInHex(mouseX, mouseY, hexes[i])) { return i; } } return null; }
+      function pointInHex(px, py, h) {
+        if (!h) return false;
+        const dx = px - h.x;
+        const dy = py - h.y;
+        return (dx * dx + dy * dy) <= CONSTS.HEX_SIZE_SQUARED;
+      }
+
+      function pixelToAxial(pixelX, pixelY, gridOffsetX, gridOffsetY) {
+        const worldX = pixelX - gridOffsetX;
+        const worldY = pixelY - gridOffsetY;
+
+        const q_frac = (2 / 3 * worldX) / CONSTS.HEX_SIZE;
+        const r_frac = (-1 / 3 * worldX + CONSTS.SQRT3 / 3 * worldY) / CONSTS.HEX_SIZE;
+
+        // Convert fractional axial to fractional cube
+        const x_frac = q_frac;
+        const z_frac = r_frac;
+        const y_frac = -x_frac - z_frac;
+
+        // Round cube coordinates
+        let rx = Math.round(x_frac);
+        let ry = Math.round(y_frac);
+        let rz = Math.round(z_frac);
+
+        // Correct rounding errors
+        const x_diff = Math.abs(rx - x_frac);
+        const y_diff = Math.abs(ry - y_frac);
+        const z_diff = Math.abs(rz - z_frac);
+
+        if (x_diff > y_diff && x_diff > z_diff) {
+          rx = -ry - rz;
+        } else if (y_diff > z_diff) {
+          ry = -rx - rz;
+        } else {
+          rz = -rx - ry;
+        }
+        return { q: rx, r: rz }; // Return rounded axial (cube.x is q, cube.z is r)
+      }
+
+      function getHexUnderMouse() {
+        if (gameState.combat) return null;
+
+        const candidateAxial = pixelToAxial(mouseX, mouseY, gameState.gridOffsetX, gameState.gridOffsetY);
+
+        const candidates = [{q: candidateAxial.q, r: candidateAxial.r}];
+        for (const dir of AXIAL_DIRECTIONS) {
+            candidates.push({ q: candidateAxial.q + dir.q, r: candidateAxial.r + dir.r });
+        }
+
+        for (const coords of candidates) {
+            const idx = axialToIndex(coords.q, coords.r);
+            if (idx !== null && hexes[idx] && hexes[idx].isVisible) {
+                if (pointInHex(mouseX, mouseY, hexes[idx])) {
+                    return idx;
+                }
+            }
+        }
+        return null;
+      }
       function clampMenuToScreen() { if (menuX + CONSTS.MENU_WIDTH > width) menuX = width - CONSTS.MENU_WIDTH; if (menuY + actions.length * CONSTS.MENU_ITEM_HEIGHT > height) menuY = height - actions.length * CONSTS.MENU_ITEM_HEIGHT; if (menuX < 0) menuX = 0; if (menuY < 0) menuY = 0; }
 
       const EVENT_POOL = [ { id: 'storm', name: 'Sudden Storm', type: 'Instant', weight: 3, desc: "Dark clouds gather rapidly, spawning a treacherous storm nearby.", effectFn: (ship) => { const hazard = spawnStormNear(ship); if (hazard) { gameState.activeHazards.push(hazard); addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: A storm brews at (${hexes[hazard.idx].q}, ${hexes[hazard.idx].r})!`, "Event"); } else { addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Storm clouds gathered but found no open sea nearby.`, "Event"); } } }, { id: 'merchant', name: 'Travelling Merchant', type: 'Choice', weight: 2, desc: "A merchant vessel hails you, offering 3 Wheat for 6 Gold.", options: ['Buy (6G)', 'Ignore'], effectFn: (ship, choice) => { if (choice === 'Buy (6G)') { const cost = 6; const amount = 3; const currentCargo = ship.cargo[CONSTS.RESOURCE_WHEAT]; const spaceAvailable = CONSTS.SHIP_MAX_CARGO - currentCargo; if (ship.cargo[CONSTS.RESOURCE_GOLD] >= cost && spaceAvailable > 0) { const canTake = Math.min(amount, spaceAvailable); ship.cargo[CONSTS.RESOURCE_GOLD] -= cost; ship.cargo[CONSTS.RESOURCE_WHEAT] += canTake; addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Bought ${canTake} ${CONSTS.RESOURCE_WHEAT} for ${cost}G. (Space: ${spaceAvailable})`, "Event"); } else if (ship.cargo[CONSTS.RESOURCE_GOLD] < cost) { addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Cannot afford the merchant's offer (Need 6G).`, "Event"); } else { addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: No space for the merchant's wheat.`, "Event"); } } else { addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Passed on the merchant's deal.`, "Event"); } } }, { id: 'favorable_winds', name: 'Favorable Winds', type: 'Instant', weight: 4, desc: "Strong tailwinds promise swift travel next turn.", effectFn: (ship) => { if (!ship.status) ship.status = {}; ship.status.windBoost = (ship.status.windBoost || 0) + 1; addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Caught favorable winds! (+1 MP next turn).`, "Event"); } }, { id: 'lost_scouts', name: 'Lost Scouts', type: 'Instant', weight: 2, desc: "A scouting party failed to return, but salvaged some timber.", effectFn: (ship) => { const crewLoss = Math.min(2, ship.crew); const woodGain = 1; const spaceAvailable = CONSTS.SHIP_MAX_CARGO - ship.cargo[CONSTS.RESOURCE_WOOD]; const actualWoodGain = Math.min(woodGain, spaceAvailable); ship.crew -= crewLoss; ship.cargo[CONSTS.RESOURCE_WOOD] += actualWoodGain; addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Lost ${crewLoss} crew, gained ${actualWoodGain} ${CONSTS.RESOURCE_WOOD}.`, "Event"); if (ship.crew <= 0) { addToLog(`   Ship ${ship.id} has no crew left!`, "System"); } } }, { id: 'plague_rats', name: 'Plague Rats', type: 'Instant', weight: 1, desc: "Rats infest the ship! Sickness spreads among the crew.", effectFn: (ship) => { if (!ship.status) ship.status = {}; ship.status.crewSick = 3; addToLog(`[EVENT] ${ship.faction} Ship ${ship.id}: Crew struck by sickness! (-1 MP while sick).`, "Event"); } }, ];
@@ -173,8 +272,9 @@
         eventModal = select('#eventModal').elt; eventModalBackdrop = select('#eventModalBackdrop').elt; eventModalTitle = select('#eventModalTitle').elt; eventModalBody = select('#eventModalBody').elt; eventModalButtons = select('#eventModalButtons').elt;
         combatUiContainer = select('#combatUiContainer'); combatRoundBanner = select('#combatRoundBanner'); combatActionButtonsDiv = select('#combatActionButtons');
         combatAttackBtn = select('#combatAttackBtn').mousePressed(() => handleCombatPlayerAction('ATTACK')); combatMoveBtn = select('#combatMoveBtn').mousePressed(() => handleCombatPlayerAction('MOVE')); combatRetreatBtn = select('#combatRetreatBtn').mousePressed(() => handleCombatPlayerAction('RETREAT'));
-        const offsetX = width / 2 - (CONSTS.GRID_W / 2 * CONSTS.HEX_SIZE * CONSTS.HEX_WIDTH_FACTOR) ; const offsetY = height / 2 - (CONSTS.GRID_H / 2 * CONSTS.HEX_SIZE * CONSTS.SQRT3);
-        for (let q = 0; q < CONSTS.GRID_W; q++) { for (let r = 0; r < CONSTS.GRID_H; r++) { const pos = axialToPixel(q, r); hexes.push({ q, r, x: pos.x + offsetX, y: pos.y + offsetY, terrain: TerrainType.PLAINS, isExplored: false, isVisible: false, colony: null, market: null, forageable: false }); } }
+        gameState.gridOffsetX = width / 2 - (CONSTS.GRID_W / 2 * CONSTS.HEX_SIZE * CONSTS.HEX_WIDTH_FACTOR);
+        gameState.gridOffsetY = height / 2 - (CONSTS.GRID_H / 2 * CONSTS.HEX_SIZE * CONSTS.SQRT3);
+        for (let q = 0; q < CONSTS.GRID_W; q++) { for (let r = 0; r < CONSTS.GRID_H; r++) { const pos = axialToPixel(q, r); hexes.push({ q, r, x: pos.x + gameState.gridOffsetX, y: pos.y + gameState.gridOffsetY, terrain: TerrainType.PLAINS, isExplored: false, isVisible: false, colony: null, market: null, forageable: false }); } }
         
         generateTerrain();
         spawnAIShip(); // Spawn AI ship first
@@ -263,13 +363,130 @@
 
 
       function spawnAIShip() { let spawnQ = -1, spawnR = -1, spawnIdx = null; let attempts = 0; while (attempts < CONSTS.GRID_W * 2 && spawnIdx === null) { const q = Math.floor(random(CONSTS.GRID_W)); const r = 0; const idx = axialToIndex(q, r); if (idx !== null && hexes[idx] && hexes[idx].terrain === TerrainType.OCEAN) { let occupied = (gameState.playerShip && gameState.playerShip.q === q && gameState.playerShip.r === r) || gameState.aiShips.some(s => s.q === q && s.r === r); if (!occupied) { spawnQ = q; spawnR = r; spawnIdx = idx; break; } } attempts++; } if(spawnIdx === null) { attempts = 0; while (attempts < hexes.length && spawnIdx === null) { const idx = Math.floor(random(hexes.length)); const h = hexes[idx]; if (h && h.terrain === TerrainType.OCEAN) { let occupied = (gameState.playerShip && gameState.playerShip.q === h.q && gameState.playerShip.r === h.r) || gameState.aiShips.some(s => s.q === h.q && s.r === h.r); if (!occupied) { spawnQ = h.q; spawnR = h.r; spawnIdx = idx; break; } } attempts++; } } if(spawnIdx === null) { console.error("Failed to find valid spawn location for AI ship!"); addToLog("Error: Could not spawn AI ship.", "System"); return; } const shipId = gameState.nextShipId++; const newAIShip = { id: shipId, faction: CONSTS.FACTION_AI, q: spawnQ, r: spawnR, movesLeft: CONSTS.MOVE_POINTS_PER_TURN, crew: CONSTS.AI_INITIAL_CREW, cargo: { [CONSTS.RESOURCE_WHEAT]: 5, [CONSTS.RESOURCE_WOOD]: 5, [CONSTS.RESOURCE_GOLD]: 10 }, status: {} }; gameState.aiShips.push(newAIShip); gameState.aiOrderQueues.set(shipId, []); addToLog(`AI Rival ship [${shipId}] launched from (${spawnQ}, ${spawnR})`, CONSTS.FACTION_AI); }
-      function generateTerrain() { hexes.forEach(h => { if (h.q === 0 || h.q === CONSTS.GRID_W - 1 || h.r === 0 || h.r === CONSTS.GRID_H - 1) { h.terrain = TerrainType.OCEAN; }}); let centerQ = Math.floor(CONSTS.GRID_W / 2); let centerR = Math.floor(CONSTS.GRID_H / 2); for (let i = 0; i < 5; i++) { let q = Math.floor(random(centerQ-3, centerQ+3)); let r = Math.floor(random(centerR-3, centerR+3)); let rad = Math.floor(random(1,3)); for (const idx of spiral(q, r, rad)) { if(hexes[idx] && hexes[idx].terrain !== TerrainType.OCEAN) { hexes[idx].terrain = (random() < 0.6) ? TerrainType.OCEAN : TerrainType.COAST; }}} const coastCandidates = []; hexes.forEach((h, idx) => { if (!h || h.terrain === TerrainType.OCEAN) return; const neighbors = axialNeighbors(h.q, h.r); for (const nCoords of neighbors) { const nIdx = axialToIndex(nCoords.q, nCoords.r); if (nIdx !== null && hexes[nIdx]?.terrain === TerrainType.OCEAN) { coastCandidates.push(idx); break; } } }); coastCandidates.forEach(idx => { if (hexes[idx]) hexes[idx].terrain = TerrainType.COAST; }); hexes.forEach(h => { if (!h) return; if (h.terrain !== TerrainType.OCEAN && h.terrain !== TerrainType.COAST) { const rnd = random(); if (rnd < 0.45) h.terrain = TerrainType.PLAINS; else if (rnd < 0.70) h.terrain = TerrainType.FOREST; else if (rnd < 0.90) h.terrain = TerrainType.HILLS; else h.terrain = TerrainType.MOUNTAINS; } if (h.terrain === TerrainType.COAST || h.terrain === TerrainType.FOREST || h.terrain === TerrainType.HILLS) { h.forageable = true; } if (h.terrain === TerrainType.COAST) { if (random() < CONSTS.MARKET_SPAWN_CHANCE) { h.market = { buy: { ...priceTable.buy }, sell: { ...priceTable.sell } }; } } }); for (let i = 0; i < 2; i++) { hexes.forEach(h => { if(!h || h.terrain < TerrainType.HILLS) return; let plainsNeighbors = 0; const neighbors = axialNeighbors(h.q, h.r); for (const nCoords of neighbors) { const nIdx = axialToIndex(nCoords.q, nCoords.r); if (nIdx !== null && hexes[nIdx] && hexes[nIdx].terrain <= TerrainType.PLAINS) { plainsNeighbors++; } } if(plainsNeighbors >= 4 && h.terrain === TerrainType.MOUNTAINS) h.terrain = TerrainType.HILLS; else if (plainsNeighbors >= 5 && h.terrain === TerrainType.HILLS) h.terrain = TerrainType.PLAINS; }); } let marketCount = hexes.reduce((count, h) => count + (h && h.market ? 1 : 0), 0); console.log(`Terrain generated. Created ${marketCount} markets.`); }
+      function generateTerrain() { hexes.forEach(h => { if (h.q === 0 || h.q === CONSTS.GRID_W - 1 || h.r === 0 || h.r === CONSTS.GRID_H - 1) { h.terrain = TerrainType.OCEAN; }}); let centerQ = Math.floor(CONSTS.GRID_W / 2); let centerR = Math.floor(CONSTS.GRID_H / 2); for (let i = 0; i < 5; i++) { let q = Math.floor(random(centerQ-3, centerQ+3)); let r = Math.floor(random(centerR-3, centerR+3)); let rad = Math.floor(random(1,3)); for (const idx of spiral(q, r, rad)) { if(hexes[idx] && hexes[idx].terrain !== TerrainType.OCEAN) { hexes[idx].terrain = (random() < 0.6) ? TerrainType.OCEAN : TerrainType.COAST; }}} const coastCandidates = []; hexes.forEach((h, idx) => { if (!h || h.terrain === TerrainType.OCEAN) return; const neighbors = axialNeighbors(h.q, h.r); for (const nCoords of neighbors) { const nIdx = axialToIndex(nCoords.q, nCoords.r); if (nIdx !== null && hexes[nIdx]?.terrain === TerrainType.OCEAN) { coastCandidates.push(idx); break; } } }); coastCandidates.forEach(idx => { if (hexes[idx]) hexes[idx].terrain = TerrainType.COAST; }); hexes.forEach(h => { if (!h) return; if (h.terrain !== TerrainType.OCEAN && h.terrain !== TerrainType.COAST) { const rnd = random(); if (rnd < 0.45) h.terrain = TerrainType.PLAINS; else if (rnd < 0.70) h.terrain = TerrainType.FOREST; else if (rnd < 0.90) h.terrain = TerrainType.HILLS; else h.terrain = TerrainType.MOUNTAINS; } if (h.terrain === TerrainType.COAST || h.terrain === TerrainType.FOREST || h.terrain === TerrainType.HILLS) { h.forageable = true; } if (h.terrain === TerrainType.COAST) { if (random() < CONSTS.MARKET_SPAWN_CHANCE) { h.market = { buy: { ...priceTable.buy }, sell: { ...priceTable.sell } }; } } }); for (let i = 0; i < 2; i++) { hexes.forEach(h => { if(!h || h.terrain < TerrainType.HILLS) return; let plainsNeighbors = 0; const neighbors = axialNeighbors(h.q, h.r); for (const nCoords of neighbors) { const nIdx = axialToIndex(nCoords.q, nCoords.r); if (nIdx !== null && hexes[nIdx] && hexes[nIdx].terrain <= TerrainType.PLAINS) { plainsNeighbors++; } } if(plainsNeighbors >= 4 && h.terrain === TerrainType.MOUNTAINS) h.terrain = TerrainType.HILLS; else if (plainsNeighbors >= 5 && h.terrain === TerrainType.HILLS) h.terrain = TerrainType.PLAINS; }); } let marketCount = hexes.reduce((count, h) => count + (h && h.market ? 1 : 0), 0); console.log(`Terrain generated. Created ${marketCount} markets.`);
+        gameState.coastHexIndices = []; // Clear it in case generateTerrain could be called multiple times
+        hexes.forEach((h, idx) => {
+            if (h && h.terrain === TerrainType.COAST) {
+                gameState.coastHexIndices.push(idx);
+            }
+        });
+        console.log(`Cached ${gameState.coastHexIndices.length} coast hex indices.`);
+      }
 
       /* ===== DRAW LOOP ===== */
-      function draw() { if (gameState.combat) { drawCombat(); } else { background(CONSTS.UNEXPLORED_COLOUR); drawHexGrid(); drawHazards(); drawShips(); if (hoverIdx !== null && reachableSet.has(hoverIdx) && gameState.playerShip && !isEventModalOpen) { const startIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r); currentPathPreview = aStar(startIdx, hoverIdx, MOVE_COST); if (currentPathPreview) { drawPlannedPathPreview(currentPathPreview.path); } } else { currentPathPreview = null; } drawUI(); if (menuOpen && !isEventModalOpen) drawMenu(); } select('#endTurnBtn').elt.disabled = gameState.combat || !gameState.playerShip || gameState.playerOrderQueue.length === 0 || isEventModalOpen; if (!isEventModalOpen && !gameState.combat) updateTooltip(); else tooltipElement.hide(); }
+      function draw() {
+        if (gameState.combat) {
+          drawCombat();
+        } else {
+          background(CONSTS.UNEXPLORED_COLOUR);
+          drawHexGrid();
+          drawHazards();
+          drawShips();
+
+          if (hoverIdx !== null && reachableSet.has(hoverIdx) && gameState.playerShip && !isEventModalOpen) {
+            const startIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r);
+
+            // Check if recalculation is needed for the A* path preview
+            if (startIdx !== lastPreviewStartIdx || hoverIdx !== lastPreviewHoverIdx || gameState.playerShip.movesLeft !== lastPreviewPlayerMoves) {
+                currentPathPreview = aStar(startIdx, hoverIdx, MOVE_COST);
+                lastPreviewStartIdx = startIdx;
+                lastPreviewHoverIdx = hoverIdx;
+                lastPreviewPlayerMoves = gameState.playerShip.movesLeft;
+            }
+
+            if (currentPathPreview) {
+                drawPlannedPathPreview(currentPathPreview.path);
+            }
+          } else {
+            currentPathPreview = null;
+            // Reset caching variables when not showing a preview so it recalculates when next needed
+            lastPreviewStartIdx = null;
+            lastPreviewHoverIdx = null;
+            lastPreviewPlayerMoves = -1;
+          }
+          drawUI();
+          if (menuOpen && !isEventModalOpen) drawMenu();
+        }
+        select('#endTurnBtn').elt.disabled = gameState.combat || !gameState.playerShip || gameState.playerOrderQueue.length === 0 || isEventModalOpen;
+        if (!isEventModalOpen && !gameState.combat) updateTooltip();
+        else tooltipElement.hide();
+      }
 
       /* ===== RENDERING (Strategy Map) ===== */
-      function drawHexGrid() { if (!isEventModalOpen) hoverIdx = getHexUnderMouse(); else hoverIdx = null; hexes.forEach((h, idx) => { if (!h) return; if (!h.isExplored) { fill("#1a1a20"); noStroke(); drawHex(h.x, h.y); return; } const terrainStyle = TERRAIN_COLOURS[h.terrain]; if (!terrainStyle) { fill("#ff00ff"); stroke("#000"); } else { fill(terrainStyle.fill); stroke(terrainStyle.stroke); } strokeWeight(1); drawHex(h.x, h.y); if (h.colony) { push(); translate(h.x, h.y); fill(CONSTS.COLONY_COLOUR); noStroke(); rect(-6, -6, 12, 12); const flagPoleColor = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.AI_COLOUR : CONSTS.PLAYER_COLOUR; const flagColor = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.AI_FLAG_COLOUR : CONSTS.PLAYER_FLAG_COLOUR; stroke(flagPoleColor); strokeWeight(1.5); line(0, -6, 0, -14); fill(flagColor); noStroke(); triangle(0, -14, 8, -11, 0, -8); pop(); } if (h.market) { push(); fill(CONSTS.MARKET_COLOUR); noStroke(); ellipse(h.x + CONSTS.HEX_SIZE * 0.3, h.y + CONSTS.HEX_SIZE * 0.4, 10, 10); pop(); } if (!h.isVisible) { fill(0, 0, 0, CONSTS.FOG_ALPHA_PERCENT * 255); noStroke(); drawHex(h.x, h.y); return; } if (!isEventModalOpen) { noStroke(); if (visibleReachableSet.has(idx)) { fill(CONSTS.RANGE_COLOUR); drawHex(h.x, h.y); } if (idx === hoverIdx) { fill(CONSTS.HIGHLIGHT_COLOUR); drawHex(h.x, h.y); } } }); }
+      function drawHexGrid() {
+        if (!isEventModalOpen) hoverIdx = getHexUnderMouse();
+        else hoverIdx = null;
+
+        hexes.forEach((h, idx) => {
+          if (!h) return;
+
+          // Viewport Culling
+          const buffer = CONSTS.HEX_SIZE * 2; // A bit more buffer
+          if (h.x < -buffer || h.x > windowWidth + buffer || h.y < -buffer || h.y > windowHeight + buffer) {
+            return; // Skip drawing if hex is off-screen
+          }
+
+          if (!h.isExplored) {
+            fill(CONSTS.UNEXPLORED_COLOUR);
+            noStroke();
+            drawHex(h.x, h.y);
+            return;
+          }
+
+          // Hex is Explored
+          const terrainStyle = TERRAIN_COLOURS[h.terrain];
+          if (!terrainStyle) { fill("#ff00ff"); stroke("#000"); } // Error color
+          else { fill(terrainStyle.fill); stroke(terrainStyle.stroke); }
+          strokeWeight(1);
+          drawHex(h.x, h.y); // Draw base terrain
+
+          // Draw colony and market icons on top of terrain
+          if (h.colony) {
+            push();
+            translate(h.x, h.y);
+            fill(CONSTS.COLONY_COLOUR);
+            noStroke();
+            rect(-6, -6, 12, 12); // Base of the colony icon
+            const flagPoleColor = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.AI_COLOUR : CONSTS.PLAYER_COLOUR;
+            const flagColor = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.AI_FLAG_COLOUR : CONSTS.PLAYER_FLAG_COLOUR;
+            stroke(flagPoleColor);
+            strokeWeight(1.5);
+            line(0, -6, 0, -14); // Flagpole
+            fill(flagColor);
+            noStroke();
+            triangle(0, -14, 8, -11, 0, -8); // Flag
+            pop();
+          }
+          if (h.market) {
+            push();
+            fill(CONSTS.MARKET_COLOUR);
+            noStroke();
+            ellipse(h.x + CONSTS.HEX_SIZE * 0.3, h.y + CONSTS.HEX_SIZE * 0.4, 10, 10);
+            pop();
+          }
+
+          if (!h.isVisible) {
+            fill(0, 0, 0, CONSTS.FOG_ALPHA_PERCENT * 255);
+            noStroke();
+            drawHex(h.x, h.y); // Draw fog overlay
+          } else {
+            // Hex is Visible
+            if (!isEventModalOpen) {
+              if (visibleReachableSet.has(idx)) {
+                fill(CONSTS.RANGE_COLOUR);
+                noStroke();
+                drawHex(h.x, h.y); // Draw range highlight
+              }
+              if (idx === hoverIdx) {
+                fill(CONSTS.HIGHLIGHT_COLOUR);
+                noStroke();
+                drawHex(h.x, h.y); // Draw hover highlight (on top of range)
+              }
+            }
+          }
+        });
+      }
+
       function drawHazards() { gameState.activeHazards.forEach(hazard => { const h = hexes[hazard.idx]; if (h && h.isVisible) { push(); translate(h.x, h.y); const hazardColor = CONSTS.HAZARD_COLOURS[hazard.kind] || '#ffffff'; fill(hazardColor); noStroke(); const size = CONSTS.HAZARD_ICON_SIZE; if (hazard.kind === 'Storm') { ellipse(0, 0, size * 1.2, size * 0.8); ellipse(-size * 0.3, -size * 0.2, size * 0.8, size * 0.6); ellipse(size * 0.3, size * 0.2, size * 0.8, size * 0.6); } else if (hazard.kind === 'Reef') { stroke(hazardColor); strokeWeight(2); line(-size / 2, -size / 2, size / 2, size / 2); line(-size / 2, size / 2, size / 2, -size / 2); } else if (hazard.kind === 'Pirates') { fill(hazardColor); ellipse(0, -size*0.2, size*0.8, size*0.8); rect(-size*0.4, size*0.2, size*0.8, size*0.3); fill('#111'); ellipse(-size*0.2, -size*0.2, size*0.2, size*0.2); ellipse(size*0.2, -size*0.2, size*0.2, size*0.2); } pop(); } }); }
       function drawShips() { if (gameState.playerShip) { const shipIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r); if (shipIdx !== null && hexes[shipIdx]?.isVisible) { drawOneShip(hexes[shipIdx], gameState.playerShip); } } gameState.aiShips.forEach(aiShip => { const shipIdx = axialToIndex(aiShip.q, aiShip.r); if (shipIdx !== null && hexes[shipIdx]?.isVisible) { drawOneShip(hexes[shipIdx], aiShip); } }); }
       function drawOneShip(shipHex, shipData) { if (!shipHex || !shipData) return; const shipColor = shipData.faction === CONSTS.FACTION_AI ? CONSTS.AI_COLOUR : CONSTS.PLAYER_COLOUR; const shipRadius = CONSTS.HEX_SIZE * CONSTS.SHIP_RADIUS_FACTOR; push(); translate(shipHex.x, shipHex.y); fill(shipColor); stroke("#222"); strokeWeight(1.5); triangle(0, -shipRadius*0.8, shipRadius*0.6, shipRadius*0.4, -shipRadius*0.6, shipRadius*0.4); if (shipData.status && shipData.status.crewSick > 0) { fill(CONSTS.HAZARD_COLOURS.Reef); noStroke(); ellipse(shipRadius * 0.5, -shipRadius * 0.6, 6, 6); } pop(); }
@@ -278,14 +495,150 @@
       function drawMenu() { if (isEventModalOpen) return; push(); translate(menuX, menuY); fill("#262932"); stroke("#888"); strokeWeight(1); rect(0, 0, CONSTS.MENU_WIDTH, actions.length * CONSTS.MENU_ITEM_HEIGHT, 4); noStroke(); fill("#eeeeee"); textSize(14); actions.forEach((act, i) => { const itemY = i * CONSTS.MENU_ITEM_HEIGHT; const isHovered = mouseX > menuX && mouseX < menuX + CONSTS.MENU_WIDTH && mouseY > menuY + itemY && mouseY < menuY + itemY + CONSTS.MENU_ITEM_HEIGHT; const isDisabled = isActionDisabled(act, hexes[selectedIdx]); if (isHovered && !isDisabled) { fill("#4d73ff"); rect(2, itemY + 2, CONSTS.MENU_WIDTH - 4, CONSTS.MENU_ITEM_HEIGHT - 4, 3); fill("#ffffff"); } else if (isDisabled) { fill("#777777"); } else { fill("#eeeeee"); } text(act, 10, itemY + CONSTS.MENU_ITEM_HEIGHT / 2); }); pop(); }
 
       /* ===== UI & ORDER HANDLING (Strategy Map) ===== */
-      function updateOrderPanel() { orderPanel.innerHTML = ''; if (gameState.playerOrderQueue.length === 0) { orderPanel.innerHTML = '<span style="font-size: 12px; color: #888;">No orders queued.</span>'; return; } gameState.playerOrderQueue.forEach((order, index) => { const item = document.createElement('div'); item.classList.add('orderItem'); item.dataset.orderId = order.id; item.dataset.index = index; const targetHex = hexes[order.targetIdx]; const coordsLabel = targetHex ? `(${targetHex.q}-${targetHex.r})` : '(?)'; const terrainLabel = targetHex ? getTerrainName(targetHex.terrain) : ''; const fullLabel = `${order.type} ${coordsLabel} ${terrainLabel}`; let iconColor = "#888"; switch (order.type) { case 'Sail': iconColor = "#4dc0ff"; break; case 'Scout': iconColor = CONSTS.PLAYER_COLOUR; break; case 'Build Outpost': iconColor = "#5b9148"; break; case 'Forage': iconColor = "#206a23"; break; case 'Trade': iconColor = CONSTS.MARKET_COLOUR; break; case 'Attack': iconColor = CONSTS.HAZARD_COLOURS.Pirates; break; } item.innerHTML = `<span class="orderLabel" title="${fullLabel}"><span class="orderIcon" style="background-color: ${iconColor};"></span><span class="orderText">${order.type} ${coordsLabel}</span></span><span class="orderControls">${index > 0 ? '<button class="reorderBtn upBtn" title="Move Up">▲</button>' : '<button disabled style="opacity:0;">▲</button>'}${index < gameState.playerOrderQueue.length - 1 ? '<button class="reorderBtn downBtn" title="Move Down">▼</button>' : '<button disabled style="opacity:0;">▼</button>'}<button class="deleteBtn" title="Cancel Order">❌</button></span>`; item.querySelector('.deleteBtn').addEventListener('click', (e) => { e.stopPropagation(); removePlayerOrder(order.id); }); const upBtn = item.querySelector('.upBtn:not([disabled])'); if (upBtn) { upBtn.addEventListener('click', (e) => { e.stopPropagation(); reorderPlayerOrder(index, index - 1); }); } const downBtn = item.querySelector('.downBtn:not([disabled])'); if (downBtn) { downBtn.addEventListener('click', (e) => { e.stopPropagation(); reorderPlayerOrder(index, index + 1); }); } orderPanel.appendChild(item); }); }
+      function updateOrderPanel() {
+        const fragment = document.createDocumentFragment();
+
+        if (gameState.playerOrderQueue.length === 0) {
+            const emptyMsg = document.createElement('span');
+            emptyMsg.style.fontSize = '12px';
+            emptyMsg.style.color = '#888';
+            emptyMsg.textContent = 'No orders queued.';
+            fragment.appendChild(emptyMsg);
+        } else {
+            gameState.playerOrderQueue.forEach((order, index) => {
+                const item = document.createElement('div');
+                item.classList.add('orderItem');
+                item.dataset.orderId = order.id;
+                item.dataset.index = index;
+                const targetHex = hexes[order.targetIdx];
+                const coordsLabel = targetHex ? `(${targetHex.q}-${targetHex.r})` : '(?)';
+                const terrainLabel = targetHex ? getTerrainName(targetHex.terrain) : '';
+                const fullLabel = `${order.type} ${coordsLabel} ${terrainLabel}`;
+                let iconColor = "#888";
+                switch (order.type) {
+                    case 'Sail': iconColor = "#4dc0ff"; break;
+                    case 'Scout': iconColor = CONSTS.PLAYER_COLOUR; break;
+                    case 'Build Outpost': iconColor = "#5b9148"; break;
+                    case 'Forage': iconColor = "#206a23"; break;
+                    case 'Trade': iconColor = CONSTS.MARKET_COLOUR; break;
+                    case 'Attack': iconColor = CONSTS.HAZARD_COLOURS.Pirates; break;
+                }
+                item.innerHTML = `<span class="orderLabel" title="${fullLabel}"><span class="orderIcon" style="background-color: ${iconColor};"></span><span class="orderText">${order.type} ${coordsLabel}</span></span><span class="orderControls">${index > 0 ? '<button class="reorderBtn upBtn" title="Move Up">▲</button>' : '<button disabled style="opacity:0;">▲</button>'}${index < gameState.playerOrderQueue.length - 1 ? '<button class="reorderBtn downBtn" title="Move Down">▼</button>' : '<button disabled style="opacity:0;">▼</button>'}<button class="deleteBtn" title="Cancel Order">❌</button></span>`;
+                item.querySelector('.deleteBtn').addEventListener('click', (e) => { e.stopPropagation(); removePlayerOrder(order.id); });
+                const upBtn = item.querySelector('.upBtn:not([disabled])');
+                if (upBtn) { upBtn.addEventListener('click', (e) => { e.stopPropagation(); reorderPlayerOrder(index, index - 1); }); }
+                const downBtn = item.querySelector('.downBtn:not([disabled])');
+                if (downBtn) { downBtn.addEventListener('click', (e) => { e.stopPropagation(); reorderPlayerOrder(index, index + 1); }); }
+                fragment.appendChild(item);
+            });
+        }
+        orderPanel.innerHTML = ''; // Clear just before appending the fragment
+        orderPanel.appendChild(fragment); // Append fragment once
+      }
       function getHexTooltipContent(h) { let tipContent = `(${h.q}, ${h.r}) ${getTerrainName(h.terrain)}`; tipContent += `\nMove Cost: ${MOVE_COST[h.terrain] ?? CONSTS.DEFAULT_MOVE_COST}`; if (h.forageable) tipContent += `\n[Forageable]`; if (h.market) tipContent += `\n[Market]`; const currentHexIndex = axialToIndex(h.q, h.r); const hazardOnHex = gameState.activeHazards.find(haz => haz.idx === currentHexIndex); if (hazardOnHex) { tipContent += `\n[Hazard: ${hazardOnHex.kind}] (TTL: ${hazardOnHex.ttl})`; } let shipOnHex = null; if (gameState.playerShip && gameState.playerShip.q === h.q && gameState.playerShip.r === h.r) { shipOnHex = gameState.playerShip; } if (!shipOnHex) { shipOnHex = gameState.aiShips.find(s => s.q === h.q && s.r === h.r && h.isVisible); } if (shipOnHex) { tipContent += `\n${shipOnHex.faction === CONSTS.FACTION_AI ? 'AI Rival' : 'Player Ship'} (Crew: ${shipOnHex.crew})`; tipContent += `\n Cargo: W:${shipOnHex.cargo[CONSTS.RESOURCE_WHEAT]} Wd:${shipOnHex.cargo[CONSTS.RESOURCE_WOOD]} G:${shipOnHex.cargo[CONSTS.RESOURCE_GOLD]}`; } if (h.colony) { const factionName = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.FACTION_AI : CONSTS.FACTION_PLAYER; tipContent += `\n${factionName} Outpost: ${h.colony.name}`; if (h.colony.faction === CONSTS.FACTION_PLAYER){ tipContent += `\n Stock: W:${h.colony.stock[CONSTS.RESOURCE_WHEAT]} Wd:${h.colony.stock[CONSTS.RESOURCE_WOOD]}`; } tipContent += ` Crew: ${h.colony.crew}`; } if (currentPathPreview && hoverIdx === currentHexIndex) { tipContent += `\nPath Cost: ${currentPathPreview.cost}`; } return tipContent; }
       function getOrderTooltipContent(order) { const h = hexes[order.targetIdx]; let tipContent = `${order.type}`; if (h) { tipContent += ` at (${h.q}, ${h.r}) ${getTerrainName(h.terrain)}`; if (order.type === 'Sail' && order.cost !== undefined) { tipContent += ` [Est. Cost: ${order.cost}]`; } if (order.type === 'Forage') { const resourceType = (h.terrain === TerrainType.FOREST) ? CONSTS.RESOURCE_WOOD : CONSTS.RESOURCE_WHEAT; tipContent += ` [Resource: ${resourceType}]`; } if (order.type === 'Trade' && order.action) { tipContent += ` [AI: ${order.action} ${order.resource}]`; } } else { tipContent += ' at Invalid Target'; } return tipContent; }
-      function updateTooltip() { if (isEventModalOpen || gameState.combat) { tooltipElement.hide(); return; } let showTip = false; let newTooltipTarget = null; const orderItems = orderPanel.querySelectorAll('.orderItem'); orderItems.forEach(item => { const rect = item.getBoundingClientRect(); if (mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom) { const orderId = parseInt(item.dataset.orderId); const order = gameState.playerOrderQueue.find(o => o.id === orderId); if (order) { newTooltipTarget = { type: 'order', data: order }; showTip = true; } } }); if (!showTip && hoverIdx !== null && hexes[hoverIdx]?.isVisible) { const orderRect = orderPanel.getBoundingClientRect(); const logRect = logPanelContainer.getBoundingClientRect(); if (!(mouseX >= orderRect.left && mouseX <= orderRect.right && mouseY >= orderRect.top && mouseY <= orderRect.bottom) && !(mouseX >= logRect.left && mouseX <= logRect.right && mouseY >= logRect.top && mouseY <= logRect.bottom)) { newTooltipTarget = { type: 'hex', data: hexes[hoverIdx] }; showTip = true; } } if (showTip && newTooltipTarget) { let tipContent = ''; if (newTooltipTarget.type === 'hex') { tipContent = getHexTooltipContent(newTooltipTarget.data); } else if (newTooltipTarget.type === 'order') { tipContent = getOrderTooltipContent(newTooltipTarget.data); } tooltipElement.html(tipContent.replace(/\n/g, '<br>')); tooltipElement.show(); } else { tooltipElement.hide(); } if (tooltipElement.style('display') !== 'none') { const tipRect = tooltipElement.elt.getBoundingClientRect(); let newX = mouseX + 15; let newY = mouseY + 15; if (newX + tipRect.width > windowWidth - 10) { newX = mouseX - tipRect.width - 10; } if (newY + tipRect.height > windowHeight - 10) { newY = mouseY - tipRect.height - 10; } if (newX < 10) newX = 10; if (newY < 10) newY = 10; tooltipElement.position(newX, newY); } }
+      function updateTooltip() {
+        if (isEventModalOpen || gameState.combat) {
+            tooltipElement.hide();
+            lastTooltipContent = ''; // Reset when hidden
+            lastTooltipX = -1;
+            lastTooltipY = -1;
+            return;
+        }
+        let showTip = false;
+        let newTooltipTarget = null;
+        const orderItems = orderPanel.querySelectorAll('.orderItem');
+        orderItems.forEach(item => {
+            const rect = item.getBoundingClientRect();
+            if (mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom) {
+                const orderId = parseInt(item.dataset.orderId);
+                const order = gameState.playerOrderQueue.find(o => o.id === orderId);
+                if (order) {
+                    newTooltipTarget = { type: 'order', data: order };
+                    showTip = true;
+                }
+            }
+        });
+        if (!showTip && hoverIdx !== null && hexes[hoverIdx]?.isVisible) {
+            const orderRect = orderPanel.getBoundingClientRect();
+            const logRect = logPanelContainer.getBoundingClientRect();
+            if (!(mouseX >= orderRect.left && mouseX <= orderRect.right && mouseY >= orderRect.top && mouseY <= orderRect.bottom) &&
+                !(mouseX >= logRect.left && mouseX <= logRect.right && mouseY >= logRect.top && mouseY <= logRect.bottom)) {
+                newTooltipTarget = { type: 'hex', data: hexes[hoverIdx] };
+                showTip = true;
+            }
+        }
+
+        if (showTip && newTooltipTarget) {
+            let tipContent = '';
+            if (newTooltipTarget.type === 'hex') { tipContent = getHexTooltipContent(newTooltipTarget.data); }
+            else if (newTooltipTarget.type === 'order') { tipContent = getOrderTooltipContent(newTooltipTarget.data); }
+
+            if (tipContent !== lastTooltipContent) {
+                tooltipElement.html(tipContent.replace(/\n/g, '<br>'));
+                lastTooltipContent = tipContent;
+            }
+            tooltipElement.show();
+        } else {
+            if (tooltipElement.style('display') !== 'none') { // Only hide if currently shown
+                 tooltipElement.hide();
+            }
+            lastTooltipContent = ''; // Reset when hidden
+        }
+
+        if (tooltipElement.style('display') !== 'none') {
+            const tipRect = tooltipElement.elt.getBoundingClientRect();
+            let newX = mouseX + 15;
+            let newY = mouseY + 15;
+            if (newX + tipRect.width > windowWidth - 10) { newX = mouseX - tipRect.width - 10; }
+            if (newY + tipRect.height > windowHeight - 10) { newY = mouseY - tipRect.height - 10; }
+            if (newX < 10) newX = 10;
+            if (newY < 10) newY = 10;
+
+            if (newX !== lastTooltipX || newY !== lastTooltipY) {
+                tooltipElement.position(newX, newY);
+                lastTooltipX = newX;
+                lastTooltipY = newY;
+            }
+        } else {
+             lastTooltipX = -1; // Reset when hidden
+             lastTooltipY = -1;
+        }
+      }
       function addPlayerOrder(type, targetIdx) { if (isEventModalOpen || gameState.combat) return; if (!gameState.playerShip) { addToLog("Cannot add order: No player ship.", "System"); return; } if (targetIdx === null || !hexes[targetIdx]) { addToLog(`Cannot add order: Invalid target index ${targetIdx}.`, "System"); return; } const targetHex = hexes[targetIdx]; const shipIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r); if (['Forage', 'Trade', 'Build Outpost', 'Scout'].includes(type) && shipIdx !== targetIdx) { addToLog(`Cannot add order: Ship must be at target (${targetHex.q}, ${targetHex.r}) for ${type}.`, "System"); menuOpen = false; selectedIdx = null; return; } if (isActionDisabled(type, targetHex)) { addToLog(`Cannot add order: ${type} requirements not met at (${targetHex.q}, ${targetHex.r}).`, "System"); menuOpen = false; selectedIdx = null; return; } const newOrder = { id: gameState.nextOrderId++, type: type, targetIdx: targetIdx, cost: (type === 'Sail' || type === 'Attack') ? aStar(shipIdx, targetIdx, MOVE_COST)?.cost : undefined }; gameState.playerOrderQueue.push(newOrder); addToLog(`Order added: ${type} target (${targetHex.q}, ${targetHex.r})`); updateOrderPanel(); select('#endTurnBtn').elt.disabled = false; menuOpen = false; selectedIdx = null; }
       function removePlayerOrder(orderId) { const orderIndex = gameState.playerOrderQueue.findIndex(order => order.id === orderId); if (orderIndex > -1) { const removedOrder = gameState.playerOrderQueue.splice(orderIndex, 1)[0]; addToLog(`Order ${orderId} (${removedOrder.type}) removed.`); updateOrderPanel(); select('#endTurnBtn').elt.disabled = gameState.combat || !gameState.playerShip || gameState.playerOrderQueue.length === 0 || isEventModalOpen; } else { addToLog(`Could not remove order ${orderId}: Not found.`, "System"); } }
       function reorderPlayerOrder(fromIndex, toIndex) { if (fromIndex < 0 || fromIndex >= gameState.playerOrderQueue.length || toIndex < 0 || toIndex >= gameState.playerOrderQueue.length) { console.error(`Invalid reorder indices: from ${fromIndex} to ${toIndex}`); return; } const [item] = gameState.playerOrderQueue.splice(fromIndex, 1); gameState.playerOrderQueue.splice(toIndex, 0, item); addToLog(`Order ${item.id} (${item.type}) moved.`); updateOrderPanel(); }
-      function addToLog(message, type = CONSTS.FACTION_PLAYER) { let prefix = ""; let styleClass = ""; if (type === CONSTS.FACTION_AI) { prefix = CONSTS.LOG_PREFIX_AI; } else if (type === 'System') { prefix = CONSTS.LOG_PREFIX_SYSTEM; } else if (type === 'Event') { prefix = CONSTS.LOG_PREFIX_EVENT_TEMPLATE(gameState.turnCount); styleClass = `style="color:${CONSTS.EVENT_LOG_COLOUR};"`; } else if (type === 'Combat') { prefix = CONSTS.COMBAT_LOG_PREFIX; styleClass = `style="color:${CONSTS.COMBAT_LOG_COLOUR};"`; } else { prefix = CONSTS.LOG_PREFIX_PLAYER_TURN_TEMPLATE(gameState.turnCount); } gameState.turnLog.push(`<span ${styleClass}>${prefix + message}</span>`); if (gameState.turnLog.length > CONSTS.LOG_MAX_LINES) { gameState.turnLog.shift(); } logPanel.innerHTML = gameState.turnLog.join('\n'); if (!gameState.combat) logPanel.scrollTop = logPanel.scrollHeight; }
+      function addToLog(message, type = CONSTS.FACTION_PLAYER) {
+        let prefix = "";
+        let styleClass = "";
+        if (type === CONSTS.FACTION_AI) { prefix = CONSTS.LOG_PREFIX_AI; }
+        else if (type === 'System') { prefix = CONSTS.LOG_PREFIX_SYSTEM; }
+        else if (type === 'Event') { prefix = CONSTS.LOG_PREFIX_EVENT_TEMPLATE(gameState.turnCount); styleClass = `style="color:${CONSTS.EVENT_LOG_COLOUR};"`; }
+        else if (type === 'Combat') { prefix = CONSTS.COMBAT_LOG_PREFIX; styleClass = `style="color:${CONSTS.COMBAT_LOG_COLOUR};"`; }
+        else { prefix = CONSTS.LOG_PREFIX_PLAYER_TURN_TEMPLATE(gameState.turnCount); }
+
+        const newLogElement = document.createElement('span');
+        if (styleClass.startsWith('style="') && styleClass.endsWith('"')) {
+            newLogElement.setAttribute('style', styleClass.substring('style="'.length, styleClass.length -1));
+        }
+        newLogElement.textContent = prefix + message;
+
+        logPanel.appendChild(newLogElement);
+        logPanel.appendChild(document.createTextNode('\n'));
+
+        while (logPanel.childNodes.length > CONSTS.LOG_MAX_LINES * 2 && CONSTS.LOG_MAX_LINES > 0) {
+            logPanel.removeChild(logPanel.firstChild); // Remove span
+            logPanel.removeChild(logPanel.firstChild); // Remove newline text node
+        }
+
+        // Sync gameState.turnLog array for compatibility if needed elsewhere
+        gameState.turnLog.push(`<span ${styleClass}>${prefix + message}</span>`);
+        if (gameState.turnLog.length > CONSTS.LOG_MAX_LINES) {
+          gameState.turnLog.shift();
+        }
+
+        if (!gameState.combat) logPanel.scrollTop = logPanel.scrollHeight;
+      }
 
       /* ===== EVENT HANDLERS (Strategy Map) ===== */
       function isActionDisabled(actionName, targetHex) {
@@ -415,9 +768,149 @@
       }
 
       /* ===== TURN LOGIC (Phases) ===== */
-      function planAITurn() { addToLog("Planning AI turn...", CONSTS.FACTION_AI); gameState.aiShips.forEach(aiShip => { const shipId = aiShip.id; const currentOrders = []; let currentMp = aiShip.movesLeft; if (currentMp <= 0) { gameState.aiOrderQueues.set(shipId, []); return; } const currentIdx = axialToIndex(aiShip.q, aiShip.r); if (currentIdx === null) { gameState.aiOrderQueues.set(shipId, []); return; } let targetIdx = null; let sailOrder = null; let mpAfterSail = currentMp; let plannedEndIdx = currentIdx; let nearestPlayerColonyDist = Infinity; let nearestPlayerColonyIdx = null; hexes.forEach((h, idx) => { if (h && h.colony && h.colony.faction === CONSTS.FACTION_PLAYER) { const dist = axialDistance(aiShip, h); if (dist < nearestPlayerColonyDist && dist <= CONSTS.AI_TARGET_COLONY_RANGE) { nearestPlayerColonyDist = dist; nearestPlayerColonyIdx = idx; } } }); if (nearestPlayerColonyIdx !== null) { targetIdx = nearestPlayerColonyIdx; } else { let nearestCoastDist = Infinity; let nearestCoastIdx = null; hexes.forEach((h, idx) => { if (h && h.terrain === TerrainType.COAST && !h.colony) { const dist = axialDistance(aiShip, h); if (dist < nearestCoastDist) { nearestCoastDist = dist; nearestCoastIdx = idx; } } }); if (nearestCoastIdx !== null) { targetIdx = nearestCoastIdx; } else { const aiReachable = computeReachable(aiShip.q, aiShip.r, currentMp); const potentialTargets = []; aiReachable.forEach(idx => { const h = hexes[idx]; if(h && (h.terrain === TerrainType.COAST || h.forageable || h.market) && !h.colony) { potentialTargets.push(idx); } }); if(potentialTargets.length > 0) { targetIdx = random(potentialTargets); } } } if (targetIdx !== null && targetIdx !== currentIdx) { const pathResult = aStar(currentIdx, targetIdx, MOVE_COST); if (pathResult && pathResult.path.length > 0) { let mpSpent = 0; let reachablePathEndIdx = currentIdx; for(const stepIdx of pathResult.path) { const stepCost = MOVE_COST[hexes[stepIdx].terrain] ?? CONSTS.DEFAULT_MOVE_COST; if (mpSpent + stepCost <= currentMp) { mpSpent += stepCost; reachablePathEndIdx = stepIdx; } else { break; } } if(reachablePathEndIdx !== currentIdx) { sailOrder = { id: gameState.nextOrderId++, type: 'Sail', targetIdx: reachablePathEndIdx, cost: mpSpent }; plannedEndIdx = reachablePathEndIdx; mpAfterSail = currentMp - mpSpent; } } } if (sailOrder) { currentOrders.push(sailOrder); } const plannedEndHex = hexes[plannedEndIdx]; if (!plannedEndHex) { gameState.aiOrderQueues.set(shipId, currentOrders); return; } let performedSecondaryAction = false; if (plannedEndHex.terrain === TerrainType.COAST && !plannedEndHex.colony && aiShip.crew >= CONSTS.BUILD_CREW_COST && mpAfterSail >= CONSTS.BUILD_MP_COST) { const buildOrder = { id: gameState.nextOrderId++, type: 'Build Outpost', targetIdx: plannedEndIdx }; currentOrders.push(buildOrder); mpAfterSail -= CONSTS.BUILD_MP_COST; performedSecondaryAction = true; } if (!performedSecondaryAction && plannedEndHex.forageable && mpAfterSail >= CONSTS.FORAGE_MP_COST) { const resourceType = (plannedEndHex.terrain === TerrainType.FOREST) ? CONSTS.RESOURCE_WOOD : CONSTS.RESOURCE_WHEAT; if (aiShip.cargo[resourceType] < CONSTS.SHIP_MAX_CARGO * 0.5 || (aiShip.cargo[CONSTS.RESOURCE_WHEAT] + aiShip.cargo[CONSTS.RESOURCE_WOOD]) < CONSTS.SHIP_MAX_CARGO) { const forageOrder = { id: gameState.nextOrderId++, type: 'Forage', targetIdx: plannedEndIdx }; currentOrders.push(forageOrder); mpAfterSail -= CONSTS.FORAGE_MP_COST; performedSecondaryAction = true; } } if (!performedSecondaryAction && plannedEndHex.market && mpAfterSail >= CONSTS.TRADE_MP_COST) { const market = plannedEndHex.market; let tradeOrder = null; const resToBuy = aiShip.cargo[CONSTS.RESOURCE_WHEAT] < 5 ? CONSTS.RESOURCE_WHEAT : (aiShip.cargo[CONSTS.RESOURCE_WOOD] < 5 ? CONSTS.RESOURCE_WOOD : null); const resToSell = aiShip.cargo[CONSTS.RESOURCE_WHEAT] > CONSTS.SHIP_MAX_CARGO * 0.8 ? CONSTS.RESOURCE_WHEAT : (aiShip.cargo[CONSTS.RESOURCE_WOOD] > CONSTS.SHIP_MAX_CARGO * 0.8 ? CONSTS.RESOURCE_WOOD : null); if (resToBuy && market.buy[resToBuy] && aiShip.cargo[CONSTS.RESOURCE_GOLD] >= market.buy[resToBuy] && aiShip.cargo[resToBuy] < CONSTS.SHIP_MAX_CARGO) { tradeOrder = { id: gameState.nextOrderId++, type: 'Trade', targetIdx: plannedEndIdx, action: 'Buy', resource: resToBuy, amount: 1 }; } else if (resToSell && market.sell[resToSell] && aiShip.cargo[resToSell] > 0) { tradeOrder = { id: gameState.nextOrderId++, type: 'Trade', targetIdx: plannedEndIdx, action: 'Sell', resource: resToSell, amount: 1 }; } if (tradeOrder) { currentOrders.push(tradeOrder); mpAfterSail -= CONSTS.TRADE_MP_COST; performedSecondaryAction = true; } } gameState.aiOrderQueues.set(shipId, currentOrders); }); }
+      function planAITurn() {
+        addToLog("Planning AI turn...", CONSTS.FACTION_AI);
+        gameState.aiShips.forEach(aiShip => {
+          const shipId = aiShip.id;
+          const currentOrders = [];
+          let currentMp = aiShip.movesLeft;
+          if (currentMp <= 0) {
+            gameState.aiOrderQueues.set(shipId, []);
+            return;
+          }
+          const currentIdx = axialToIndex(aiShip.q, aiShip.r);
+          if (currentIdx === null) {
+            gameState.aiOrderQueues.set(shipId, []);
+            return;
+          }
+
+          let targetIdx = null;
+          let sailOrder = null;
+          let mpAfterSail = currentMp;
+          let plannedEndIdx = currentIdx;
+          let nearestPlayerColonyDist = Infinity;
+          let nearestPlayerColonyIdx = null;
+
+          if (gameState.playerColonyIndices) {
+            gameState.playerColonyIndices.forEach(colonyIdx => {
+              const h = hexes[colonyIdx];
+              if (h && h.colony && h.colony.faction === CONSTS.FACTION_PLAYER) {
+                const dist = axialDistance(aiShip, h);
+                if (dist < nearestPlayerColonyDist && dist <= CONSTS.AI_TARGET_COLONY_RANGE) {
+                  nearestPlayerColonyDist = dist;
+                  nearestPlayerColonyIdx = colonyIdx;
+                }
+              }
+            });
+          }
+
+          if (nearestPlayerColonyIdx !== null) {
+            targetIdx = nearestPlayerColonyIdx;
+          } else {
+            let nearestCoastDist = Infinity;
+            let nearestCoastIdx = null;
+            if (gameState.coastHexIndices) {
+              gameState.coastHexIndices.forEach(coastIdx => {
+                const h = hexes[coastIdx];
+                if (h && !h.colony) {
+                  const dist = axialDistance(aiShip, h);
+                  if (dist < nearestCoastDist) {
+                    nearestCoastDist = dist;
+                    nearestCoastIdx = coastIdx;
+                  }
+                }
+              });
+            }
+
+            if (nearestCoastIdx !== null) {
+              targetIdx = nearestCoastIdx;
+            } else {
+              const aiReachable = computeReachable(aiShip.q, aiShip.r, currentMp);
+              const potentialTargets = [];
+              aiReachable.forEach(idx => {
+                const h = hexes[idx];
+                if (h && (h.terrain === TerrainType.COAST || h.forageable || h.market) && !h.colony) {
+                  potentialTargets.push(idx);
+                }
+              });
+              if (potentialTargets.length > 0) {
+                targetIdx = random(potentialTargets);
+              }
+            }
+          }
+
+          if (targetIdx !== null && targetIdx !== currentIdx) {
+            const pathResult = aStar(currentIdx, targetIdx, MOVE_COST);
+            if (pathResult && pathResult.path.length > 0) {
+              let mpSpent = 0;
+              let reachablePathEndIdx = currentIdx;
+              for (const stepIdx of pathResult.path) {
+                const stepCost = MOVE_COST[hexes[stepIdx].terrain] ?? CONSTS.DEFAULT_MOVE_COST;
+                if (mpSpent + stepCost <= currentMp) {
+                  mpSpent += stepCost;
+                  reachablePathEndIdx = stepIdx;
+                } else {
+                  break;
+                }
+              }
+              if (reachablePathEndIdx !== currentIdx) {
+                sailOrder = { id: gameState.nextOrderId++, type: 'Sail', targetIdx: reachablePathEndIdx, cost: mpSpent };
+                plannedEndIdx = reachablePathEndIdx;
+                mpAfterSail = currentMp - mpSpent;
+              }
+            }
+          }
+
+          if (sailOrder) {
+            currentOrders.push(sailOrder);
+          }
+
+          const plannedEndHex = hexes[plannedEndIdx];
+          if (!plannedEndHex) {
+            gameState.aiOrderQueues.set(shipId, currentOrders);
+            return;
+          }
+
+          let performedSecondaryAction = false;
+          if (plannedEndHex.terrain === TerrainType.COAST && !plannedEndHex.colony && aiShip.crew >= CONSTS.BUILD_CREW_COST && mpAfterSail >= CONSTS.BUILD_MP_COST) {
+            const buildOrder = { id: gameState.nextOrderId++, type: 'Build Outpost', targetIdx: plannedEndIdx };
+            currentOrders.push(buildOrder);
+            mpAfterSail -= CONSTS.BUILD_MP_COST;
+            performedSecondaryAction = true;
+          }
+
+          if (!performedSecondaryAction && plannedEndHex.forageable && mpAfterSail >= CONSTS.FORAGE_MP_COST) {
+            const resourceType = (plannedEndHex.terrain === TerrainType.FOREST) ? CONSTS.RESOURCE_WOOD : CONSTS.RESOURCE_WHEAT;
+            if (aiShip.cargo[resourceType] < CONSTS.SHIP_MAX_CARGO * 0.5 || (aiShip.cargo[CONSTS.RESOURCE_WHEAT] + aiShip.cargo[CONSTS.RESOURCE_WOOD]) < CONSTS.SHIP_MAX_CARGO) {
+              const forageOrder = { id: gameState.nextOrderId++, type: 'Forage', targetIdx: plannedEndIdx };
+              currentOrders.push(forageOrder);
+              mpAfterSail -= CONSTS.FORAGE_MP_COST;
+              performedSecondaryAction = true;
+            }
+          }
+
+          if (!performedSecondaryAction && plannedEndHex.market && mpAfterSail >= CONSTS.TRADE_MP_COST) {
+            const market = plannedEndHex.market;
+            let tradeOrder = null;
+            const resToBuy = aiShip.cargo[CONSTS.RESOURCE_WHEAT] < 5 ? CONSTS.RESOURCE_WHEAT : (aiShip.cargo[CONSTS.RESOURCE_WOOD] < 5 ? CONSTS.RESOURCE_WOOD : null);
+            const resToSell = aiShip.cargo[CONSTS.RESOURCE_WHEAT] > CONSTS.SHIP_MAX_CARGO * 0.8 ? CONSTS.RESOURCE_WHEAT : (aiShip.cargo[CONSTS.RESOURCE_WOOD] > CONSTS.SHIP_MAX_CARGO * 0.8 ? CONSTS.RESOURCE_WOOD : null);
+
+            if (resToBuy && market.buy[resToBuy] && aiShip.cargo[CONSTS.RESOURCE_GOLD] >= market.buy[resToBuy] && aiShip.cargo[resToBuy] < CONSTS.SHIP_MAX_CARGO) {
+              tradeOrder = { id: gameState.nextOrderId++, type: 'Trade', targetIdx: plannedEndIdx, action: 'Buy', resource: resToBuy, amount: 1 };
+            } else if (resToSell && market.sell[resToSell] && aiShip.cargo[resToSell] > 0) {
+              tradeOrder = { id: gameState.nextOrderId++, type: 'Trade', targetIdx: plannedEndIdx, action: 'Sell', resource: resToSell, amount: 1 };
+            }
+            if (tradeOrder) {
+              currentOrders.push(tradeOrder);
+              mpAfterSail -= CONSTS.TRADE_MP_COST;
+              performedSecondaryAction = true;
+            }
+          }
+          gameState.aiOrderQueues.set(shipId, currentOrders);
+        });
+      }
       function executeAllTurnOrders() { addToLog(`--- Executing Orders Turn ${gameState.turnCount} ---`, "System"); if (gameState.playerShip) { const playerShip = gameState.playerShip; const playerQueue = [...gameState.playerOrderQueue]; gameState.playerOrderQueue = []; let currentShipIdx = axialToIndex(playerShip.q, playerShip.r); if (playerQueue.length > 0) { addToLog(`Executing Player [${playerShip.id}] orders (${playerQueue.length})...`); for (const order of playerQueue) { currentShipIdx = resolveOrder(order, playerShip, currentShipIdx); if (gameState.combat) { addToLog("Combat initiated, remaining orders for this ship discarded.", "System"); updateOrderPanel(); return; } } addToLog(`Player [${playerShip.id}] finished orders.`); } } else { if (gameState.playerOrderQueue.length > 0) { addToLog("Clearing player order queue (no ship present).", "System"); gameState.playerOrderQueue = []; } } gameState.aiShips.forEach(aiShip => { if (gameState.combat) return; const aiQueue = gameState.aiOrderQueues.get(aiShip.id) || []; gameState.aiOrderQueues.set(aiShip.id, []); let currentShipIdx = axialToIndex(aiShip.q, aiShip.r); if (aiQueue.length > 0) { addToLog(`Executing AI Ship [${aiShip.id}] orders (${aiQueue.length})...`, CONSTS.FACTION_AI); for (const order of aiQueue) { currentShipIdx = resolveOrder(order, aiShip, currentShipIdx); if (gameState.combat) { addToLog("Combat initiated, remaining orders for this ship discarded.", "System"); updateOrderPanel(); return; } } addToLog(`AI Ship [${aiShip.id}] finished orders.`, CONSTS.FACTION_AI); } else { addToLog(`AI Ship [${aiShip.id}] has no orders queued.`, CONSTS.FACTION_AI); } }); if (!gameState.combat) addToLog("--- Order Execution Complete ---", "System"); if (gameState.playerShip) { reachableSet = computeReachable(gameState.playerShip.q, gameState.playerShip.r, gameState.playerShip.movesLeft); } else { reachableSet.clear(); } updateVisibility(); updateOrderPanel(); select('#endTurnBtn').elt.disabled = true; }
-      function resolveOrder(order, ship, currentShipIdx) { const faction = ship.faction; const logPrefix = faction === CONSTS.FACTION_AI ? CONSTS.FACTION_AI : CONSTS.FACTION_PLAYER; if (currentShipIdx === null) { addToLog(`Order ${order.id} (${order.type}) skipped: Ship ${ship.id} invalid state.`, logPrefix); return currentShipIdx; } const targetHex = hexes[order.targetIdx]; if (!targetHex) { addToLog(`Order ${order.id} (${order.type}) skipped: Invalid target index ${order.targetIdx}.`, logPrefix); return currentShipIdx; } const targetCoordsLabel = `(${targetHex.q}, ${targetHex.r})`; const needsPresence = ['Build Outpost', 'Forage', 'Trade', 'Scout']; if (needsPresence.includes(order.type) && currentShipIdx !== order.targetIdx) { addToLog(`Order ${order.id} (${order.type}) at ${targetCoordsLabel} skipped: Ship ${ship.id} not present.`, logPrefix); return currentShipIdx; } switch (order.type) { case 'Sail': case 'Attack': { const pathResult = aStar(currentShipIdx, order.targetIdx, MOVE_COST); const calculatedCost = pathResult ? pathResult.cost : Infinity; if (!pathResult || calculatedCost === Infinity) { addToLog(`Order ${order.id} (${order.type}) to ${targetCoordsLabel} failed: No path.`, logPrefix); return currentShipIdx; } if (calculatedCost > ship.movesLeft) { addToLog(`Order ${order.id} (${order.type}) to ${targetCoordsLabel} failed: Insufficient MP (Needs ${calculatedCost}, Has ${ship.movesLeft}).`, logPrefix); return currentShipIdx; } const destCoords = indexToAxial(order.targetIdx); if (!destCoords) { console.error(`Critical Error: ${order.type} destination index ${order.targetIdx}`); addToLog(`Order ${order.id} (${order.type}) critical error.`, logPrefix); return currentShipIdx; } ship.q = destCoords.q; ship.r = destCoords.r; ship.movesLeft -= calculatedCost; currentShipIdx = order.targetIdx; addToLog(`Order ${order.id}: Ship ${ship.id} moved to ${targetCoordsLabel} ${getTerrainName(targetHex.terrain)} for ${order.type} (Cost ${calculatedCost}, MP left ${ship.movesLeft}).`, logPrefix); if (order.type === 'Attack') { if (targetHex.colony && targetHex.colony.faction !== ship.faction) { enterCombat(ship, targetHex, CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY); } else { const enemyShipOnHex = gameState.aiShips.find(s => s.q === targetHex.q && s.r === targetHex.r && s.faction !== ship.faction) || (gameState.playerShip && ship.faction === CONSTS.FACTION_AI && gameState.playerShip.q === targetHex.q && gameState.playerShip.r === targetHex.r); if (enemyShipOnHex) { enterCombat(ship, enemyShipOnHex, CONSTS.COMBAT_CONTEXT_SHIP_VS_SHIP); } } } break; } case 'Scout': { if (CONSTS.SCOUT_MP_COST > ship.movesLeft) { addToLog(`Order ${order.id} (Scout) at ${targetCoordsLabel} failed: Insufficient MP.`, logPrefix); return currentShipIdx; } ship.movesLeft -= CONSTS.SCOUT_MP_COST; let revealedCount = 0; if (faction === CONSTS.FACTION_PLAYER) { for (const idx of spiral(targetHex.q, targetHex.r, 1)) { if (hexes[idx] && !hexes[idx].isExplored) { hexes[idx].isExplored = true; revealedCount++; } } addToLog(`Order ${order.id}: Ship ${ship.id} scouted at ${targetCoordsLabel}. Revealed ${revealedCount} hexes (Cost ${CONSTS.SCOUT_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); } else { addToLog(`Order ${order.id}: AI Ship ${ship.id} scouted at ${targetCoordsLabel} (Cost ${CONSTS.SCOUT_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); } break; } case 'Build Outpost': { if ([TerrainType.MOUNTAINS, TerrainType.OCEAN].includes(targetHex.terrain)) { addToLog(`Build failed: Cannot build on ${getTerrainName(targetHex.terrain)}.`, logPrefix); return currentShipIdx; } if (targetHex.colony !== null) { addToLog(`Build failed: Location occupied.`, logPrefix); return currentShipIdx; } if (CONSTS.BUILD_MP_COST > ship.movesLeft) { addToLog(`Build failed: Insufficient MP.`, logPrefix); return currentShipIdx; } if (ship.crew < CONSTS.BUILD_CREW_COST) { addToLog(`Build failed: Insufficient Crew.`, logPrefix); return currentShipIdx; } let resourceCostStr = ""; if (faction === CONSTS.FACTION_PLAYER) { if (gameState.resources[CONSTS.RESOURCE_WOOD] < CONSTS.BUILD_WOOD_COST) { addToLog(`Build failed: Insufficient Global ${CONSTS.RESOURCE_WOOD}.`, logPrefix); return currentShipIdx; } gameState.resources[CONSTS.RESOURCE_WOOD] -= CONSTS.BUILD_WOOD_COST; resourceCostStr = `${CONSTS.BUILD_WOOD_COST} ${CONSTS.RESOURCE_WOOD} (Global), `; } ship.movesLeft -= CONSTS.BUILD_MP_COST; ship.crew -= CONSTS.BUILD_CREW_COST; const newColonyName = generateColonyName(faction); targetHex.colony = { name: newColonyName, stock: { [CONSTS.RESOURCE_WHEAT]: 0, [CONSTS.RESOURCE_WOOD]: 0 }, crew: CONSTS.BUILD_CREW_COST, faction: faction, q: targetHex.q, r: targetHex.r }; addToLog(`Order ${order.id}: Ship ${ship.id} founded colony "${newColonyName}" at ${targetCoordsLabel} (Cost ${CONSTS.BUILD_MP_COST} MP, ${resourceCostStr}${CONSTS.BUILD_CREW_COST} Crew. MP left ${ship.movesLeft})`, logPrefix); break; } case 'Forage': { if (!targetHex.forageable) { addToLog(`Forage failed: Not forageable terrain.`, logPrefix); return currentShipIdx; } if (CONSTS.FORAGE_MP_COST > ship.movesLeft) { addToLog(`Forage failed: Insufficient MP.`, logPrefix); return currentShipIdx; } const resourceType = (targetHex.terrain === TerrainType.FOREST) ? CONSTS.RESOURCE_WOOD : CONSTS.RESOURCE_WHEAT; let yieldAmount = Math.floor(random(1, 4)); const totalCargoNow = Object.values(ship.cargo).reduce((a,b)=>a+b,0); const spaceAvailable = CONSTS.SHIP_MAX_CARGO - totalCargoNow; const actualAmount = Math.max(0, Math.min(yieldAmount, spaceAvailable)); ship.movesLeft -= CONSTS.FORAGE_MP_COST; if (actualAmount > 0) { ship.cargo[resourceType] = (ship.cargo[resourceType]||0) + actualAmount; addToLog(`Order ${order.id}: Ship ${ship.id} foraged ${actualAmount} ${resourceType} at ${targetCoordsLabel} (Cost ${CONSTS.FORAGE_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); if (yieldAmount > actualAmount) { addToLog(`   (Cargo capacity reached)`, logPrefix); } } else { addToLog(`Order ${order.id}: Ship ${ship.id} attempted forage at ${targetCoordsLabel}, but cargo full. MP Spent. (MP left ${ship.movesLeft}).`, logPrefix); } break; } case 'Trade': { const market = targetHex.market; if (!market) { addToLog(`Trade failed: No market.`, logPrefix); return currentShipIdx; } if (CONSTS.TRADE_MP_COST > ship.movesLeft) { addToLog(`Trade failed: Insufficient MP.`, logPrefix); return currentShipIdx; } ship.movesLeft -= CONSTS.TRADE_MP_COST; let action = null; let resource = null; let amount = 1; if (faction === CONSTS.FACTION_AI && order.action && order.resource) { action = order.action; resource = order.resource; amount = order.amount || 1; } else { if (ship.cargo[CONSTS.RESOURCE_GOLD] >= market.buy[CONSTS.RESOURCE_WHEAT] && (ship.cargo[CONSTS.RESOURCE_WHEAT]||0) < CONSTS.SHIP_MAX_CARGO) { action = 'Buy'; resource = CONSTS.RESOURCE_WHEAT; amount = 1; } else if ((ship.cargo[CONSTS.RESOURCE_WHEAT]||0) > 0 && market.sell[CONSTS.RESOURCE_WHEAT] > 0) { action = 'Sell'; resource = CONSTS.RESOURCE_WHEAT; amount = 1; } } if (action && resource && market.buy[resource] !== null && market.sell[resource] !== null) { if (action === 'Buy') { const cost = market.buy[resource] * amount; const canAfford = ship.cargo[CONSTS.RESOURCE_GOLD] >= cost; const totalCargoNow = Object.values(ship.cargo).reduce((a,b)=>a+b,0) - (ship.cargo[resource]||0); const hasSpace = (totalCargoNow + amount) <= CONSTS.SHIP_MAX_CARGO; if (canAfford && hasSpace) { ship.cargo[resource] = (ship.cargo[resource]||0) + amount; ship.cargo[CONSTS.RESOURCE_GOLD] -= cost; addToLog(`Order ${order.id}: Ship ${ship.id} bought ${amount} ${resource} for ${cost} ${CONSTS.RESOURCE_GOLD} at ${targetCoordsLabel}.`, logPrefix); } else { addToLog(`Trade (Buy ${resource}) failed (Afford: ${canAfford}, Space: ${hasSpace}).`, logPrefix); } } else if (action === 'Sell') { const hasResource = (ship.cargo[resource]||0) >= amount; const canSell = market.sell[resource] > 0; if (hasResource && canSell) { const earnings = market.sell[resource] * amount; ship.cargo[resource] -= amount; ship.cargo[CONSTS.RESOURCE_GOLD] += earnings; addToLog(`Order ${order.id}: Ship ${ship.id} sold ${amount} ${resource} for ${earnings} ${CONSTS.RESOURCE_GOLD} at ${targetCoordsLabel}.`, logPrefix); } else { addToLog(`Trade (Sell ${resource}) failed (Have: ${hasResource}, Market Buys: ${canSell}).`, logPrefix); } } } else { addToLog(`Trade attempt at ${targetCoordsLabel}, no valid transaction. MP Spent.`, logPrefix); } addToLog(`   (MP left ${ship.movesLeft})`, logPrefix); break; } default: addToLog(`Order ${order.id} skipped: Unknown order type "${order.type}".`, logPrefix); } return currentShipIdx; }
+      function resolveOrder(order, ship, currentShipIdx) { const faction = ship.faction; const logPrefix = faction === CONSTS.FACTION_AI ? CONSTS.FACTION_AI : CONSTS.FACTION_PLAYER; if (currentShipIdx === null) { addToLog(`Order ${order.id} (${order.type}) skipped: Ship ${ship.id} invalid state.`, logPrefix); return currentShipIdx; } const targetHex = hexes[order.targetIdx]; if (!targetHex) { addToLog(`Order ${order.id} (${order.type}) skipped: Invalid target index ${order.targetIdx}.`, logPrefix); return currentShipIdx; } const targetCoordsLabel = `(${targetHex.q}, ${targetHex.r})`; const needsPresence = ['Build Outpost', 'Forage', 'Trade', 'Scout']; if (needsPresence.includes(order.type) && currentShipIdx !== order.targetIdx) { addToLog(`Order ${order.id} (${order.type}) at ${targetCoordsLabel} skipped: Ship ${ship.id} not present.`, logPrefix); return currentShipIdx; } switch (order.type) { case 'Sail': case 'Attack': { const pathResult = aStar(currentShipIdx, order.targetIdx, MOVE_COST); const calculatedCost = pathResult ? pathResult.cost : Infinity; if (!pathResult || calculatedCost === Infinity) { addToLog(`Order ${order.id} (${order.type}) to ${targetCoordsLabel} failed: No path.`, logPrefix); return currentShipIdx; } if (calculatedCost > ship.movesLeft) { addToLog(`Order ${order.id} (${order.type}) to ${targetCoordsLabel} failed: Insufficient MP (Needs ${calculatedCost}, Has ${ship.movesLeft}).`, logPrefix); return currentShipIdx; } const destCoords = indexToAxial(order.targetIdx); if (!destCoords) { console.error(`Critical Error: ${order.type} destination index ${order.targetIdx}`); addToLog(`Order ${order.id} (${order.type}) critical error.`, logPrefix); return currentShipIdx; } ship.q = destCoords.q; ship.r = destCoords.r; ship.movesLeft -= calculatedCost; currentShipIdx = order.targetIdx; addToLog(`Order ${order.id}: Ship ${ship.id} moved to ${targetCoordsLabel} ${getTerrainName(targetHex.terrain)} for ${order.type} (Cost ${calculatedCost}, MP left ${ship.movesLeft}).`, logPrefix); if (order.type === 'Attack') { if (targetHex.colony && targetHex.colony.faction !== ship.faction) { enterCombat(ship, targetHex, CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY); } else { const enemyShipOnHex = gameState.aiShips.find(s => s.q === targetHex.q && s.r === targetHex.r && s.faction !== ship.faction) || (gameState.playerShip && ship.faction === CONSTS.FACTION_AI && gameState.playerShip.q === targetHex.q && gameState.playerShip.r === targetHex.r); if (enemyShipOnHex) { enterCombat(ship, enemyShipOnHex, CONSTS.COMBAT_CONTEXT_SHIP_VS_SHIP); } } } break; } case 'Scout': { if (CONSTS.SCOUT_MP_COST > ship.movesLeft) { addToLog(`Order ${order.id} (Scout) at ${targetCoordsLabel} failed: Insufficient MP.`, logPrefix); return currentShipIdx; } ship.movesLeft -= CONSTS.SCOUT_MP_COST; let revealedCount = 0; if (faction === CONSTS.FACTION_PLAYER) { for (const idx of spiral(targetHex.q, targetHex.r, 1)) { if (hexes[idx] && !hexes[idx].isExplored) { hexes[idx].isExplored = true; revealedCount++; } } addToLog(`Order ${order.id}: Ship ${ship.id} scouted at ${targetCoordsLabel}. Revealed ${revealedCount} hexes (Cost ${CONSTS.SCOUT_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); } else { addToLog(`Order ${order.id}: AI Ship ${ship.id} scouted at ${targetCoordsLabel} (Cost ${CONSTS.SCOUT_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); } break; } case 'Build Outpost': { if ([TerrainType.MOUNTAINS, TerrainType.OCEAN].includes(targetHex.terrain)) { addToLog(`Build failed: Cannot build on ${getTerrainName(targetHex.terrain)}.`, logPrefix); return currentShipIdx; } if (targetHex.colony !== null) { addToLog(`Build failed: Location occupied.`, logPrefix); return currentShipIdx; } if (CONSTS.BUILD_MP_COST > ship.movesLeft) { addToLog(`Build failed: Insufficient MP.`, logPrefix); return currentShipIdx; } if (ship.crew < CONSTS.BUILD_CREW_COST) { addToLog(`Build failed: Insufficient Crew.`, logPrefix); return currentShipIdx; } let resourceCostStr = ""; if (faction === CONSTS.FACTION_PLAYER) { if (gameState.resources[CONSTS.RESOURCE_WOOD] < CONSTS.BUILD_WOOD_COST) { addToLog(`Build failed: Insufficient Global ${CONSTS.RESOURCE_WOOD}.`, logPrefix); return currentShipIdx; } gameState.resources[CONSTS.RESOURCE_WOOD] -= CONSTS.BUILD_WOOD_COST; resourceCostStr = `${CONSTS.BUILD_WOOD_COST} ${CONSTS.RESOURCE_WOOD} (Global), `; } ship.movesLeft -= CONSTS.BUILD_MP_COST; ship.crew -= CONSTS.BUILD_CREW_COST; const newColonyName = generateColonyName(faction); targetHex.colony = { name: newColonyName, stock: { [CONSTS.RESOURCE_WHEAT]: 0, [CONSTS.RESOURCE_WOOD]: 0 }, crew: CONSTS.BUILD_CREW_COST, faction: faction, q: targetHex.q, r: targetHex.r }; addToLog(`Order ${order.id}: Ship ${ship.id} founded colony "${newColonyName}" at ${targetCoordsLabel} (Cost ${CONSTS.BUILD_MP_COST} MP, ${resourceCostStr}${CONSTS.BUILD_CREW_COST} Crew. MP left ${ship.movesLeft})`, logPrefix); if (faction === CONSTS.FACTION_PLAYER) { if (!gameState.playerColonyIndices) { gameState.playerColonyIndices = []; } gameState.playerColonyIndices.push(order.targetIdx); } break; } case 'Forage': { if (!targetHex.forageable) { addToLog(`Forage failed: Not forageable terrain.`, logPrefix); return currentShipIdx; } if (CONSTS.FORAGE_MP_COST > ship.movesLeft) { addToLog(`Forage failed: Insufficient MP.`, logPrefix); return currentShipIdx; } const resourceType = (targetHex.terrain === TerrainType.FOREST) ? CONSTS.RESOURCE_WOOD : CONSTS.RESOURCE_WHEAT; let yieldAmount = Math.floor(random(1, 4)); const totalCargoNow = Object.values(ship.cargo).reduce((a,b)=>a+b,0); const spaceAvailable = CONSTS.SHIP_MAX_CARGO - totalCargoNow; const actualAmount = Math.max(0, Math.min(yieldAmount, spaceAvailable)); ship.movesLeft -= CONSTS.FORAGE_MP_COST; if (actualAmount > 0) { ship.cargo[resourceType] = (ship.cargo[resourceType]||0) + actualAmount; addToLog(`Order ${order.id}: Ship ${ship.id} foraged ${actualAmount} ${resourceType} at ${targetCoordsLabel} (Cost ${CONSTS.FORAGE_MP_COST}, MP left ${ship.movesLeft}).`, logPrefix); if (yieldAmount > actualAmount) { addToLog(`   (Cargo capacity reached)`, logPrefix); } } else { addToLog(`Order ${order.id}: Ship ${ship.id} attempted forage at ${targetCoordsLabel}, but cargo full. MP Spent. (MP left ${ship.movesLeft}).`, logPrefix); } break; } case 'Trade': { const market = targetHex.market; if (!market) { addToLog(`Trade failed: No market.`, logPrefix); return currentShipIdx; } if (CONSTS.TRADE_MP_COST > ship.movesLeft) { addToLog(`Trade failed: Insufficient MP.`, logPrefix); return currentShipIdx; } ship.movesLeft -= CONSTS.TRADE_MP_COST; let action = null; let resource = null; let amount = 1; if (faction === CONSTS.FACTION_AI && order.action && order.resource) { action = order.action; resource = order.resource; amount = order.amount || 1; } else { if (ship.cargo[CONSTS.RESOURCE_GOLD] >= market.buy[CONSTS.RESOURCE_WHEAT] && (ship.cargo[CONSTS.RESOURCE_WHEAT]||0) < CONSTS.SHIP_MAX_CARGO) { action = 'Buy'; resource = CONSTS.RESOURCE_WHEAT; amount = 1; } else if ((ship.cargo[CONSTS.RESOURCE_WHEAT]||0) > 0 && market.sell[CONSTS.RESOURCE_WHEAT] > 0) { action = 'Sell'; resource = CONSTS.RESOURCE_WHEAT; amount = 1; } } if (action && resource && market.buy[resource] !== null && market.sell[resource] !== null) { if (action === 'Buy') { const cost = market.buy[resource] * amount; const canAfford = ship.cargo[CONSTS.RESOURCE_GOLD] >= cost; const totalCargoNow = Object.values(ship.cargo).reduce((a,b)=>a+b,0) - (ship.cargo[resource]||0); const hasSpace = (totalCargoNow + amount) <= CONSTS.SHIP_MAX_CARGO; if (canAfford && hasSpace) { ship.cargo[resource] = (ship.cargo[resource]||0) + amount; ship.cargo[CONSTS.RESOURCE_GOLD] -= cost; addToLog(`Order ${order.id}: Ship ${ship.id} bought ${amount} ${resource} for ${cost} ${CONSTS.RESOURCE_GOLD} at ${targetCoordsLabel}.`, logPrefix); } else { addToLog(`Trade (Buy ${resource}) failed (Afford: ${canAfford}, Space: ${hasSpace}).`, logPrefix); } } else if (action === 'Sell') { const hasResource = (ship.cargo[resource]||0) >= amount; const canSell = market.sell[resource] > 0; if (hasResource && canSell) { const earnings = market.sell[resource] * amount; ship.cargo[resource] -= amount; ship.cargo[CONSTS.RESOURCE_GOLD] += earnings; addToLog(`Order ${order.id}: Ship ${ship.id} sold ${amount} ${resource} for ${earnings} ${CONSTS.RESOURCE_GOLD} at ${targetCoordsLabel}.`, logPrefix); } else { addToLog(`Trade (Sell ${resource}) failed (Have: ${hasResource}, Market Buys: ${canSell}).`, logPrefix); } } } else { addToLog(`Trade attempt at ${targetCoordsLabel}, no valid transaction. MP Spent.`, logPrefix); } addToLog(`   (MP left ${ship.movesLeft})`, logPrefix); break; } default: addToLog(`Order ${order.id} skipped: Unknown order type "${order.type}".`, logPrefix); } return currentShipIdx; }
       function performColonyUpkeep() { let playerColonies = hexes.filter(h => h && h.colony && h.colony.faction === CONSTS.FACTION_PLAYER); if (playerColonies.length === 0) return; addToLog("Performing player colony upkeep..."); let totalWheatConsumed = 0; let starvedColonies = 0; playerColonies.forEach(h => { const colony = h.colony; let needed = (CONSTS.COLONY_UPKEEP_WHEAT_PER_CREW * colony.crew) || 1; let consumed = 0; let localConsume = Math.min(needed, colony.stock[CONSTS.RESOURCE_WHEAT]); if (localConsume > 0) { colony.stock[CONSTS.RESOURCE_WHEAT] -= localConsume; consumed += localConsume; needed -= localConsume; } if (needed > 0) { let globalConsume = Math.min(needed, gameState.resources[CONSTS.RESOURCE_WHEAT]); if (globalConsume > 0) { gameState.resources[CONSTS.RESOURCE_WHEAT] -= globalConsume; consumed += globalConsume; needed -= globalConsume; addToLog(`Colony "${colony.name}" drew ${globalConsume} ${CONSTS.RESOURCE_WHEAT} from global stock.`); } } if (needed > 0) { addToLog(`Colony "${colony.name}" at (${h.q}, ${h.r}) suffers hunger! (Lacked ${needed} ${CONSTS.RESOURCE_WHEAT}) Crew: ${colony.crew}`, "System"); starvedColonies++; } else { totalWheatConsumed += consumed; } }); if (totalWheatConsumed > 0) addToLog(`Total player colony upkeep: ${totalWheatConsumed} ${CONSTS.RESOURCE_WHEAT} consumed.`); if (starvedColonies === 0 && playerColonies.length > 0) addToLog("All player colonies fed."); else if (starvedColonies > 0) addToLog(`${starvedColonies} player colonies experienced hunger.`, "System"); }
       function performShipColonyTransfer() { if ((!gameState.playerShip && gameState.aiShips.length === 0) || !hexes.some(h => h && h.colony)) return; addToLog("Performing Ship->Colony transfers...", "System"); let transferOccurred = false; if (gameState.playerShip) { const ship = gameState.playerShip; const currentShipIdx = axialToIndex(ship.q, ship.r); if (currentShipIdx !== null) { const endTurnHex = hexes[currentShipIdx]; if (endTurnHex && endTurnHex.colony && endTurnHex.colony.faction === CONSTS.FACTION_PLAYER) { const colony = endTurnHex.colony; const transferLimit = 5; const wheatToTransfer = Math.min(transferLimit, ship.cargo[CONSTS.RESOURCE_WHEAT]||0); if (wheatToTransfer > 0) { colony.stock[CONSTS.RESOURCE_WHEAT] = (colony.stock[CONSTS.RESOURCE_WHEAT]||0) + wheatToTransfer; ship.cargo[CONSTS.RESOURCE_WHEAT] -= wheatToTransfer; addToLog(`Ship ${ship.id} transferred ${wheatToTransfer} ${CONSTS.RESOURCE_WHEAT} to colony "${colony.name}".`); transferOccurred = true; } const woodToTransfer = Math.min(transferLimit, ship.cargo[CONSTS.RESOURCE_WOOD]||0); if (woodToTransfer > 0) { colony.stock[CONSTS.RESOURCE_WOOD] = (colony.stock[CONSTS.RESOURCE_WOOD]||0) + woodToTransfer; ship.cargo[CONSTS.RESOURCE_WOOD] -= woodToTransfer; addToLog(`Ship ${ship.id} transferred ${woodToTransfer} ${CONSTS.RESOURCE_WOOD} to colony "${colony.name}".`); transferOccurred = true; } } } } gameState.aiShips.forEach(ship => { const currentShipIdx = axialToIndex(ship.q, ship.r); if (currentShipIdx !== null) { const endTurnHex = hexes[currentShipIdx]; if (endTurnHex && endTurnHex.colony && endTurnHex.colony.faction === CONSTS.FACTION_AI) { const colony = endTurnHex.colony; const transferLimit = 5; const wheatToTransfer = Math.min(transferLimit, ship.cargo[CONSTS.RESOURCE_WHEAT]||0); if (wheatToTransfer > 0) { colony.stock[CONSTS.RESOURCE_WHEAT] = (colony.stock[CONSTS.RESOURCE_WHEAT]||0) + wheatToTransfer; ship.cargo[CONSTS.RESOURCE_WHEAT] -= wheatToTransfer; addToLog(`AI Ship ${ship.id} transferred ${wheatToTransfer} ${CONSTS.RESOURCE_WHEAT} to colony "${colony.name}".`, CONSTS.FACTION_AI); transferOccurred = true; } const woodToTransfer = Math.min(transferLimit, ship.cargo[CONSTS.RESOURCE_WOOD]||0); if (woodToTransfer > 0) { colony.stock[CONSTS.RESOURCE_WOOD] = (colony.stock[CONSTS.RESOURCE_WOOD]||0) + woodToTransfer; ship.cargo[CONSTS.RESOURCE_WOOD] -= woodToTransfer; addToLog(`AI Ship ${ship.id} transferred ${woodToTransfer} ${CONSTS.RESOURCE_WOOD} to colony "${colony.name}".`, CONSTS.FACTION_AI); transferOccurred = true; } } } }); if (!transferOccurred) { addToLog("No ship-colony transfers occurred.", "System"); } }
       function applyHazards() { if (gameState.activeHazards.length === 0) return; addToLog("Applying Hazard effects...", "System"); const remainingHazards = []; let hazardEffectsApplied = false; gameState.activeHazards.forEach(hazard => { hazard.ttl--; if (hazard.ttl <= 0) { addToLog(`Hazard ${hazard.kind} at (${hexes[hazard.idx].q}, ${hexes[hazard.idx].r}) dissipated.`, "System"); return; } if (gameState.playerShip) { const playerIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r); if (playerIdx === hazard.idx) { applyHazardEffect(gameState.playerShip, hazard); hazardEffectsApplied = true; } } gameState.aiShips.forEach(aiShip => { const aiIdx = axialToIndex(aiShip.q, aiShip.r); if (aiIdx === hazard.idx) { applyHazardEffect(aiShip, hazard); hazardEffectsApplied = true; } }); remainingHazards.push(hazard); }); gameState.activeHazards = remainingHazards; if (!hazardEffectsApplied) { addToLog("No ships were affected by hazards this turn.", "System"); } }
@@ -439,7 +932,7 @@
       /* ========================================================== TACTICAL COMBAT ========================================================== */
       function initCombatBoard(attackerEntity, defenderEntity, context) { const board = Array(CONSTS.COMBAT_GRID_DIM).fill(null).map(() => Array(CONSTS.COMBAT_GRID_DIM).fill(null).map(() => ({ terrain: 'Open' }))); const units = []; const combatantsOriginalData = []; const attackerStartY = Math.floor(CONSTS.COMBAT_GRID_DIM / 2) + CONSTS.COMBAT_UNIT_START_Y_OFFSET_FROM_CENTER; const defenderStartY = attackerStartY; units.push({ id: `combatUnit_${attackerEntity.id}`, originalId: attackerEntity.id, originalType: 'SHIP', faction: attackerEntity.faction, hp: CONSTS.COMBAT_DEFAULT_UNIT_HP, x: CONSTS.COMBAT_ATTACKER_START_X_OFFSET, y: attackerStartY, }); combatantsOriginalData.push({ id: attackerEntity.id, type: 'SHIP', q: attackerEntity.q, r: attackerEntity.r, faction: attackerEntity.faction }); const defenderOriginalQ = context === CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY ? defenderEntity.q : defenderEntity.q; const defenderOriginalR = context === CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY ? defenderEntity.r : defenderEntity.r; if (context === CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY) { const colony = defenderEntity.colony; units.push({ id: `combatUnit_colony_${colony.name.replace(/\s+/g, '_')}`, originalId: colony.name, originalType: 'COLONY', faction: colony.faction, hp: CONSTS.COMBAT_DEFAULT_COLONY_HP, x: CONSTS.COMBAT_GRID_DIM - CONSTS.COMBAT_DEFENDER_START_X_OFFSET_FROM_EDGE, y: defenderStartY, }); combatantsOriginalData.push({ id: colony.name, type: 'COLONY', q: defenderOriginalQ, r: defenderOriginalR, faction: colony.faction }); } else { units.push({ id: `combatUnit_${defenderEntity.id}`, originalId: defenderEntity.id, originalType: 'SHIP', faction: defenderEntity.faction, hp: CONSTS.COMBAT_DEFAULT_UNIT_HP, x: CONSTS.COMBAT_GRID_DIM - CONSTS.COMBAT_DEFENDER_START_X_OFFSET_FROM_EDGE, y: defenderStartY, }); combatantsOriginalData.push({ id: defenderEntity.id, type: 'SHIP', q: defenderOriginalQ, r: defenderOriginalR, faction: defenderEntity.faction }); } let turnFaction; let activeUnitIdxLocal; const playerIsAttacker = attackerEntity.faction === CONSTS.FACTION_PLAYER; const defenderFaction = units[1].faction; const playerIsDefender = defenderFaction === CONSTS.FACTION_PLAYER; if (playerIsAttacker || playerIsDefender) { turnFaction = CONSTS.FACTION_PLAYER; activeUnitIdxLocal = playerIsAttacker ? 0 : 1; } else { turnFaction = attackerEntity.faction; activeUnitIdxLocal = 0; } return { board, units, round: 1, turn: turnFaction, context, combatantsOriginalData, awaitingMoveClick: false, activeUnitIndex: activeUnitIdxLocal, gridStartX: (width - CONSTS.COMBAT_GRID_DIM * CONSTS.COMBAT_CELL_PIXEL_SIZE) / 2, gridStartY: (height - CONSTS.COMBAT_GRID_DIM * CONSTS.COMBAT_CELL_PIXEL_SIZE) / 2, }; }
       function enterCombat(attackerEntity, defenderEntity, context) { if (gameState.combat) return; addToLog(`Entering Combat! Context: ${context}`, "Combat"); gameState.combat = initCombatBoard(attackerEntity, defenderEntity, context); select('#uiContainer').elt.style.display = 'none'; select('#logPanelContainer').elt.style.display = 'none'; select('#endTurnBtn').elt.style.display = 'none'; menuOpen = false; combatUiContainer.style('display', 'flex'); updateCombatUi(); if (gameState.combat.turn === CONSTS.FACTION_AI) { setTimeout(runCombatAITurn, CONSTS.COMBAT_UI_AI_THINKING_DELAY_MS); } }
-      function endCombat(outcome, winningFaction) { if (!gameState.combat) return; addToLog(`Combat Ended. Outcome: ${outcome}, Winner: ${winningFaction || 'None'}`, "Combat"); const combatData = gameState.combat; combatData.units.forEach(unit => { const originalData = combatData.combatantsOriginalData.find(co => co.id === unit.originalId && co.type === unit.originalType); if (!originalData) { console.error("Could not find original data for combat unit:", unit); return; } if (unit.hp <= 0) { addToLog(`${unit.faction} ${unit.originalType} '${unit.originalId}' destroyed!`, "Combat"); if (unit.originalType === 'SHIP') { if (gameState.playerShip && gameState.playerShip.id === unit.originalId) { gameState.playerShip = null; addToLog("Player ship lost!", "System"); } else { gameState.aiShips = gameState.aiShips.filter(s => s.id !== unit.originalId); } } else if (unit.originalType === 'COLONY') { const colonyHex = hexes[axialToIndex(originalData.q, originalData.r)]; if (colonyHex && colonyHex.colony) { colonyHex.colony = null; addToLog(`Colony at (${originalData.q},${originalData.r}) destroyed!`, "System"); } } } else { if (unit.originalType === 'SHIP') { let shipToUpdate = (gameState.playerShip && gameState.playerShip.id === unit.originalId) ? gameState.playerShip : gameState.aiShips.find(s => s.id === unit.originalId); if (shipToUpdate) { shipToUpdate.q = originalData.q; shipToUpdate.r = originalData.r; shipToUpdate.movesLeft = 0; addToLog(`${unit.faction} Ship ${unit.originalId} returns to (${originalData.q},${originalData.r}), MP set to 0.`, "Combat"); } } } }); gameState.combat = null; select('#uiContainer').elt.style.display = 'flex'; select('#logPanelContainer').elt.style.display = 'block'; select('#endTurnBtn').elt.style.display = 'block'; combatUiContainer.style('display', 'none'); updateVisibility(); if (gameState.playerShip) { reachableSet = computeReachable(gameState.playerShip.q, gameState.playerShip.r, gameState.playerShip.movesLeft); } else { reachableSet.clear(); visibleReachableSet.clear(); } if (gameState.isTurnProcessingPausedForCombat && gameState.postCombatTurnResumeCallback) { gameState.postCombatTurnResumeCallback(); } else { select('#endTurnBtn').elt.disabled = isEventModalOpen || (gameState.playerShip && gameState.playerOrderQueue.length === 0); } }
+      function endCombat(outcome, winningFaction) { if (!gameState.combat) return; addToLog(`Combat Ended. Outcome: ${outcome}, Winner: ${winningFaction || 'None'}`, "Combat"); const combatData = gameState.combat; combatData.units.forEach(unit => { const originalData = combatData.combatantsOriginalData.find(co => co.id === unit.originalId && co.type === unit.originalType); if (!originalData) { console.error("Could not find original data for combat unit:", unit); return; } if (unit.hp <= 0) { addToLog(`${unit.faction} ${unit.originalType} '${unit.originalId}' destroyed!`, "Combat"); if (unit.originalType === 'SHIP') { if (gameState.playerShip && gameState.playerShip.id === unit.originalId) { gameState.playerShip = null; addToLog("Player ship lost!", "System"); } else { gameState.aiShips = gameState.aiShips.filter(s => s.id !== unit.originalId); } } else if (unit.originalType === 'COLONY') { const colonyHexIndex = axialToIndex(originalData.q, originalData.r); const colonyHex = hexes[colonyHexIndex]; if (colonyHex && colonyHex.colony) { if (colonyHex.colony.faction === CONSTS.FACTION_PLAYER && gameState.playerColonyIndices) { const indexToRemove = gameState.playerColonyIndices.indexOf(colonyHexIndex); if (indexToRemove > -1) { gameState.playerColonyIndices.splice(indexToRemove, 1); addToLog(`Player colony at (${originalData.q},${originalData.r}) removed from playerColonyIndices.`, "System"); } } colonyHex.colony = null; addToLog(`Colony at (${originalData.q},${originalData.r}) destroyed!`, "System"); } } } else { if (unit.originalType === 'SHIP') { let shipToUpdate = (gameState.playerShip && gameState.playerShip.id === unit.originalId) ? gameState.playerShip : gameState.aiShips.find(s => s.id === unit.originalId); if (shipToUpdate) { shipToUpdate.q = originalData.q; shipToUpdate.r = originalData.r; shipToUpdate.movesLeft = 0; addToLog(`${unit.faction} Ship ${unit.originalId} returns to (${originalData.q},${originalData.r}), MP set to 0.`, "Combat"); } } } }); gameState.combat = null; select('#uiContainer').elt.style.display = 'flex'; select('#logPanelContainer').elt.style.display = 'block'; select('#endTurnBtn').elt.style.display = 'block'; combatUiContainer.style('display', 'none'); updateVisibility(); if (gameState.playerShip) { reachableSet = computeReachable(gameState.playerShip.q, gameState.playerShip.r, gameState.playerShip.movesLeft); } else { reachableSet.clear(); visibleReachableSet.clear(); } if (gameState.isTurnProcessingPausedForCombat && gameState.postCombatTurnResumeCallback) { gameState.postCombatTurnResumeCallback(); } else { select('#endTurnBtn').elt.disabled = isEventModalOpen || (gameState.playerShip && gameState.playerOrderQueue.length === 0); } }
       function drawCombat() { background(50); if (!gameState.combat) return; const { board, units, gridStartX, gridStartY } = gameState.combat; for (let r = 0; r < CONSTS.COMBAT_GRID_DIM; r++) { for (let c = 0; c < CONSTS.COMBAT_GRID_DIM; c++) { const x = gridStartX + c * CONSTS.COMBAT_CELL_PIXEL_SIZE; const y = gridStartY + r * CONSTS.COMBAT_CELL_PIXEL_SIZE; stroke(100); fill(board[r][c].terrain === 'Open' ? 120 : 80); rect(x, y, CONSTS.COMBAT_CELL_PIXEL_SIZE, CONSTS.COMBAT_CELL_PIXEL_SIZE); } } units.forEach(unit => { if (unit.hp <= 0) return; const unitCenterX = gridStartX + unit.x * CONSTS.COMBAT_CELL_PIXEL_SIZE + CONSTS.COMBAT_CELL_PIXEL_SIZE / 2; const unitCenterY = gridStartY + unit.y * CONSTS.COMBAT_CELL_PIXEL_SIZE + CONSTS.COMBAT_CELL_PIXEL_SIZE / 2; const unitSize = CONSTS.COMBAT_CELL_PIXEL_SIZE * 0.4; push(); translate(unitCenterX, unitCenterY); fill(unit.faction === CONSTS.FACTION_PLAYER ? CONSTS.PLAYER_COLOUR : CONSTS.AI_COLOUR); noStroke(); if (unit.originalType === 'SHIP') { triangle(0, -unitSize, unitSize * 0.8, unitSize * 0.6, -unitSize * 0.8, unitSize * 0.6); } else { rectMode(CENTER); rect(0,0, unitSize * 1.5, unitSize * 1.5); } fill(255,0,0); for (let i = 0; i < unit.hp; i++) { ellipse(-unitSize * 0.5 + i * (unitSize * 0.4), unitSize * 1.2, unitSize*0.3, unitSize*0.3); } pop(); }); if (gameState.combat.awaitingMoveClick) { const activeUnit = gameState.combat.units[gameState.combat.activeUnitIndex]; if (activeUnit.faction === CONSTS.FACTION_PLAYER) { const validMoves = getValidCombatMoves(activeUnit); validMoves.forEach(move => { fill(0, 255, 0, 100); rect(gridStartX + move.x * CONSTS.COMBAT_CELL_PIXEL_SIZE, gridStartY + move.y * CONSTS.COMBAT_CELL_PIXEL_SIZE, CONSTS.COMBAT_CELL_PIXEL_SIZE, CONSTS.COMBAT_CELL_PIXEL_SIZE); }); } } }
       function updateCombatUi() { if (!gameState.combat) return; combatRoundBanner.html(`Round ${gameState.combat.round} / ${CONSTS.COMBAT_MAX_ROUNDS}`); if (gameState.combat.turn === CONSTS.FACTION_PLAYER) { combatActionButtonsDiv.style('display', 'block'); enableCombatActions(); } else { combatActionButtonsDiv.style('display', 'none'); disableCombatActions(); } }
       function enableCombatActions() { if (!gameState.combat || gameState.combat.turn !== CONSTS.FACTION_PLAYER) return; combatAttackBtn.removeAttribute('disabled'); combatMoveBtn.removeAttribute('disabled'); combatRetreatBtn.removeAttribute('disabled'); }
@@ -451,7 +944,17 @@
       function runCombatAITurn() { if (!gameState.combat || gameState.combat.turn !== CONSTS.FACTION_AI) return; const combat = gameState.combat; const aiUnit = combat.units[combat.activeUnitIndex]; const playerUnit = combat.units.find(u => u.faction === CONSTS.FACTION_PLAYER && u.hp > 0); if (!aiUnit || aiUnit.hp <=0 || !playerUnit) { advanceCombatTurn(); return; } if (aiUnit.hp <= CONSTS.COMBAT_AI_RETREAT_HP_THRESHOLD && CONSTS.COMBAT_DEFAULT_UNIT_HP > 1 && random() < CONSTS.COMBAT_AI_RETREAT_CHANCE) { addToLog(`AI ${aiUnit.originalType} ${aiUnit.originalId} retreats!`, "Combat"); endCombat(CONSTS.COMBAT_OUTCOME_PLAYER_VICTORY, CONSTS.FACTION_PLAYER); } else { attemptCombatAttack(aiUnit, playerUnit); } }
       function advanceCombatTurn() { if (!gameState.combat) return; if (checkCombatEndConditions()) return; const combat = gameState.combat; const oldTurnFaction = combat.units[combat.activeUnitIndex].faction; combat.activeUnitIndex = (combat.activeUnitIndex + 1) % combat.units.length; while(combat.units[combat.activeUnitIndex].hp <= 0) { combat.activeUnitIndex = (combat.activeUnitIndex + 1) % combat.units.length; } const newTurnFaction = combat.units[combat.activeUnitIndex].faction; combat.turn = newTurnFaction; if (newTurnFaction === CONSTS.FACTION_PLAYER && oldTurnFaction === CONSTS.FACTION_AI) { combat.round++; addToLog(`Starting Round ${combat.round}`, "Combat"); if (checkCombatEndConditions()) return; } updateCombatUi(); if (combat.turn === CONSTS.FACTION_AI) { setTimeout(runCombatAITurn, CONSTS.COMBAT_AI_TURN_DELAY_MS); } else { addToLog("Player's turn.", "Combat"); } }
       function checkCombatEndConditions() { if (!gameState.combat) return false; const { units, round } = gameState.combat; const livingPlayerUnits = units.filter(u => u.faction === CONSTS.FACTION_PLAYER && u.hp > 0); const livingAiUnits = units.filter(u => u.faction === CONSTS.FACTION_AI && u.hp > 0); if (livingPlayerUnits.length === 0) { endCombat(CONSTS.COMBAT_OUTCOME_PLAYER_DEFEAT, CONSTS.FACTION_AI); return true; } if (livingAiUnits.length === 0) { endCombat(CONSTS.COMBAT_OUTCOME_PLAYER_VICTORY, CONSTS.FACTION_PLAYER); return true; } if (round > CONSTS.COMBAT_MAX_ROUNDS) { addToLog("Combat reached max rounds. It's a draw!", "Combat"); endCombat(CONSTS.COMBAT_OUTCOME_DRAW_MAX_ROUNDS, null); return true; } return false; }
-      function windowResized() { resizeCanvas(windowWidth, windowHeight); if (gameState.combat) { gameState.combat.gridStartX = (width - CONSTS.COMBAT_GRID_DIM * CONSTS.COMBAT_CELL_PIXEL_SIZE) / 2; gameState.combat.gridStartY = (height - CONSTS.COMBAT_GRID_DIM * CONSTS.COMBAT_CELL_PIXEL_SIZE) / 2; } }
+      function windowResized() {
+        resizeCanvas(windowWidth, windowHeight);
+        if (gameState) { // Ensure gameState is initialized
+            gameState.gridOffsetX = width / 2 - (CONSTS.GRID_W / 2 * CONSTS.HEX_SIZE * CONSTS.HEX_WIDTH_FACTOR);
+            gameState.gridOffsetY = height / 2 - (CONSTS.GRID_H / 2 * CONSTS.HEX_SIZE * CONSTS.SQRT3);
+        }
+        if (gameState.combat) {
+          gameState.combat.gridStartX = (width - CONSTS.COMBAT_GRID_DIM * CONSTS.COMBAT_CELL_PIXEL_SIZE) / 2;
+          gameState.combat.gridStartY = (height - CONSTS.COMBAT_GRID_DIM * CONSTS.COMBAT_CELL_PIXEL_SIZE) / 2;
+        }
+      }
     </script>
   </body>
 </html>
