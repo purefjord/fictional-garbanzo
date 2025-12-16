@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>2D Minecraft - Side Scroller</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -11,6 +11,8 @@
             overflow: hidden;
             background: #87CEEB;
             font-family: 'Segoe UI', system-ui, sans-serif;
+            touch-action: none;
+            -webkit-touch-callout: none;
         }
         #gameCanvas {
             display: block;
@@ -119,6 +121,111 @@
             border-radius: 3px;
             transition: width 0.05s;
         }
+
+        /* Mobile Touch Controls */
+        #touchControls {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .touch-visible #touchControls {
+            display: block;
+        }
+        .touch-visible #controls {
+            display: none;
+        }
+        .touch-visible #ui {
+            bottom: 140px;
+        }
+        .touch-btn {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: rgba(255,255,255,0.25);
+            border: 3px solid rgba(255,255,255,0.4);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            text-shadow: 1px 1px 3px black;
+            pointer-events: all;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            transition: background 0.1s, transform 0.1s;
+        }
+        .touch-btn:active, .touch-btn.active {
+            background: rgba(255,255,255,0.5);
+            transform: scale(0.95);
+        }
+        .touch-btn.left-btn { bottom: 20px; left: 20px; }
+        .touch-btn.right-btn { bottom: 20px; left: 100px; }
+        .touch-btn.jump-btn { bottom: 20px; right: 20px; }
+        .touch-btn.mode-btn {
+            bottom: 100px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+        }
+        .touch-btn.mode-btn.place-mode {
+            background: rgba(100,200,100,0.4);
+            border-color: rgba(100,255,100,0.6);
+        }
+        #modeLabel {
+            position: absolute;
+            bottom: 160px;
+            right: 15px;
+            color: white;
+            font-size: 12px;
+            text-shadow: 1px 1px 2px black;
+            text-align: center;
+            width: 60px;
+            pointer-events: none;
+        }
+        /* Touch crosshair for aiming */
+        #touchCrosshair {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(255,255,255,0.7);
+            border-radius: 4px;
+            pointer-events: none;
+            display: none;
+            z-index: 50;
+        }
+        #touchCrosshair::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 6px;
+            height: 6px;
+            background: rgba(255,255,255,0.9);
+            border-radius: 50%;
+        }
+        .touch-visible #touchCrosshair {
+            display: block;
+        }
+        /* Larger slots on mobile */
+        .touch-visible .slot {
+            width: 40px;
+            height: 40px;
+        }
+        .touch-visible .slot-key {
+            display: none;
+        }
+        .touch-visible #info {
+            font-size: 12px;
+            padding: 6px;
+        }
     </style>
 </head>
 <body>
@@ -139,6 +246,16 @@
         Scroll - Change slot
     </div>
     <div id="miningProgress"><div class="fill"></div></div>
+
+    <!-- Mobile Touch Controls -->
+    <div id="touchControls">
+        <div id="touchCrosshair"></div>
+        <div class="touch-btn left-btn" data-action="left">&#9664;</div>
+        <div class="touch-btn right-btn" data-action="right">&#9654;</div>
+        <div class="touch-btn jump-btn" data-action="jump">&#9650;</div>
+        <div class="touch-btn mode-btn" data-action="mode">&#9935;</div>
+        <div id="modeLabel">Mine</div>
+    </div>
 
     <script>
     // ============================================
@@ -940,6 +1057,15 @@
             // Mining
             this.mining = { active: false, x: 0, y: 0, progress: 0, target: null };
 
+            // Touch controls
+            this.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            this.touchMode = 'mine'; // 'mine' or 'place'
+            this.touchTarget = { x: 0, y: 0 }; // Where to aim on touch devices
+            if (this.isTouchDevice) {
+                document.body.classList.add('touch-visible');
+                this.setupTouchControls();
+            }
+
             // Time
             this.gameTime = 0;
             this.dayProgress = 0.25; // Start at morning
@@ -1044,6 +1170,151 @@
                 }
                 this.updateUI();
             });
+        }
+
+        setupTouchControls() {
+            const buttons = document.querySelectorAll('.touch-btn');
+            const modeBtn = document.querySelector('.mode-btn');
+            const modeLabel = document.getElementById('modeLabel');
+            const crosshair = document.getElementById('touchCrosshair');
+
+            // Track active touches for multi-touch support
+            const activeTouches = new Map();
+
+            // Prevent default touch behaviors on canvas
+            this.canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+            this.canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+            // Handle button touches
+            buttons.forEach(btn => {
+                const action = btn.dataset.action;
+
+                btn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    btn.classList.add('active');
+
+                    if (action === 'left') this.keys.left = true;
+                    else if (action === 'right') this.keys.right = true;
+                    else if (action === 'jump') this.keys.jump = true;
+                    else if (action === 'mode') {
+                        // Toggle mine/place mode
+                        this.touchMode = this.touchMode === 'mine' ? 'place' : 'mine';
+                        modeLabel.textContent = this.touchMode === 'mine' ? 'Mine' : 'Place';
+                        modeBtn.textContent = this.touchMode === 'mine' ? '\u26CF' : '\u25A3';
+                        modeBtn.classList.toggle('place-mode', this.touchMode === 'place');
+                    }
+                }, { passive: false });
+
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    btn.classList.remove('active');
+
+                    if (action === 'left') this.keys.left = false;
+                    else if (action === 'right') this.keys.right = false;
+                    else if (action === 'jump') this.keys.jump = false;
+                }, { passive: false });
+
+                btn.addEventListener('touchcancel', (e) => {
+                    btn.classList.remove('active');
+                    if (action === 'left') this.keys.left = false;
+                    else if (action === 'right') this.keys.right = false;
+                    else if (action === 'jump') this.keys.jump = false;
+                });
+            });
+
+            // Handle canvas touch for mining/placing
+            let touchHoldTimer = null;
+            let isTouchingCanvas = false;
+
+            this.canvas.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    const touch = e.touches[0];
+                    isTouchingCanvas = true;
+
+                    // Update mouse position for block targeting
+                    this.mouse.x = touch.clientX;
+                    this.mouse.y = touch.clientY;
+
+                    // Update crosshair position
+                    this.updateTouchCrosshair();
+
+                    // Start hold timer for mining
+                    if (this.touchMode === 'mine') {
+                        touchHoldTimer = setTimeout(() => {
+                            if (isTouchingCanvas) {
+                                this.mouse.left = true;
+                            }
+                        }, 150); // Small delay to distinguish tap from hold
+                    }
+                }
+            }, { passive: false });
+
+            this.canvas.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 1 && isTouchingCanvas) {
+                    const touch = e.touches[0];
+                    this.mouse.x = touch.clientX;
+                    this.mouse.y = touch.clientY;
+                    this.updateTouchCrosshair();
+                }
+            }, { passive: false });
+
+            this.canvas.addEventListener('touchend', (e) => {
+                if (touchHoldTimer) {
+                    clearTimeout(touchHoldTimer);
+                    touchHoldTimer = null;
+                }
+
+                if (isTouchingCanvas && e.changedTouches.length > 0) {
+                    const touch = e.changedTouches[0];
+
+                    // If it was a quick tap and in place mode, place a block
+                    if (this.touchMode === 'place' && !this.mouse.left) {
+                        this.mouse.x = touch.clientX;
+                        this.mouse.y = touch.clientY;
+                        this.mouse.right = true;
+                        // Reset after a frame
+                        setTimeout(() => { this.mouse.right = false; }, 50);
+                    }
+
+                    this.mouse.left = false;
+                    this.mining.active = false;
+                    isTouchingCanvas = false;
+                }
+            }, { passive: false });
+
+            this.canvas.addEventListener('touchcancel', () => {
+                if (touchHoldTimer) {
+                    clearTimeout(touchHoldTimer);
+                    touchHoldTimer = null;
+                }
+                this.mouse.left = false;
+                this.mining.active = false;
+                isTouchingCanvas = false;
+            });
+
+            // Initial crosshair position (center of screen)
+            this.mouse.x = window.innerWidth / 2;
+            this.mouse.y = window.innerHeight / 2;
+            this.updateTouchCrosshair();
+        }
+
+        updateTouchCrosshair() {
+            const crosshair = document.getElementById('touchCrosshair');
+            const blockSize = CONFIG.BLOCK_SIZE;
+
+            // Snap crosshair to block grid
+            const target = this.getBlockAtMouse();
+            const screenCenterX = this.canvas.width / 2;
+            const screenCenterY = this.canvas.height / 2;
+
+            const screenX = screenCenterX + (target.x - this.cameraX) * blockSize;
+            const screenY = screenCenterY + (target.y - this.cameraY) * blockSize;
+
+            crosshair.style.left = screenX + 'px';
+            crosshair.style.top = screenY + 'px';
+            crosshair.style.width = blockSize + 'px';
+            crosshair.style.height = blockSize + 'px';
         }
 
         setupUI() {
@@ -1276,6 +1547,11 @@
             const isDay = hour >= 6 && hour < 18;
             document.getElementById('timeDisplay').textContent =
                 `${hour.toString().padStart(2, '0')}:00 (${isDay ? 'Day' : 'Night'})`;
+
+            // Update touch crosshair position (follows camera)
+            if (this.isTouchDevice) {
+                this.updateTouchCrosshair();
+            }
         }
 
         renderSky() {
