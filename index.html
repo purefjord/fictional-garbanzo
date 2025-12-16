@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Turn‑Based Hex Prototype – Milestone 10.5 (Auto Player Spawn)</title>
+    <title>Turn‑Based Hex Prototype – Milestone 11 (Complete Game)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <style>
       html,body{margin:0;padding:0;overflow:hidden;background:#111; /* Darker bg for FoW */ font-family:system-ui,sans-serif; color: #eee;}
@@ -38,6 +38,11 @@
       #combatActionButtons button { padding: 8px 15px; font-size: 14px; border: none; border-radius: 5px; cursor: pointer; background: #4d73ff; color: white; margin: 0 5px; }
       #combatActionButtons button:hover { opacity: 0.9; }
       #combatActionButtons button:disabled { background: #555; color: #999; cursor: not-allowed; }
+      #gameOverModal.victory h3 { color: #4caf50; }
+      #gameOverModal.defeat h3 { color: #f44336; }
+      #gameOverModal h3 { font-size: 24px; margin-bottom: 10px; }
+      #gameOverModal p { font-size: 16px; margin-bottom: 20px; }
+      #restartBtn { font-size: 16px; padding: 12px 24px; }
     </style>
   </head>
   <body>
@@ -62,10 +67,21 @@
             <button id="combatRetreatBtn">Retreat</button>
         </div>
     </div>
+    <div id="gameOverBackdrop" class="modal-backdrop"></div>
+    <div id="gameOverModal" class="modal" style="text-align: center;">
+        <h3 id="gameOverTitle">Game Over</h3>
+        <p id="gameOverBody">You have been defeated.</p>
+        <div class="modal-buttons" style="justify-content: center;">
+            <button id="restartBtn" class="primary">Play Again</button>
+        </div>
+    </div>
 
     <script>
       /* ==========================================================
-         TURN‑BASED HEX PROTOTYPE (p5.js) – Milestone 10.5 (Auto Player Spawn)
+         TURN‑BASED HEX PROTOTYPE (p5.js) – Milestone 11 (Complete Game)
+         - Added win/lose conditions
+         - Added game over screen with restart
+         - Balanced starting resources and outpost costs
       ========================================================== */
 
       /* ===== CONSTANTS ===== */
@@ -76,10 +92,10 @@
         FOG_ALPHA_PERCENT: 0.75, UNEXPLORED_COLOUR: "#111116",
         LOG_MAX_LINES: 35, HAZARD_ICON_SIZE: 12,
         MOVE_POINTS_PER_TURN: 5, DEFAULT_MOVE_COST: 1, SCOUT_MP_COST: 1,
-        BUILD_WOOD_COST: 10, BUILD_CREW_COST: 5, BUILD_MP_COST: 1,
+        BUILD_WOOD_COST: 10, BUILD_CREW_COST: 3, BUILD_MP_COST: 1, // Crew cost reduced from 5 to 3 for balance
         COLONY_UPKEEP_WHEAT_PER_CREW: 1, AI_INITIAL_CREW: 10,
-        PLAYER_INITIAL_CREW: 15, // Added for player ship
-        PLAYER_INITIAL_WHEAT: 5, PLAYER_INITIAL_WOOD: 10, PLAYER_INITIAL_GOLD: 5, // Added for player ship
+        PLAYER_INITIAL_CREW: 15,
+        PLAYER_INITIAL_WHEAT: 10, PLAYER_INITIAL_WOOD: 15, PLAYER_INITIAL_GOLD: 10, // Increased for better early game
         AI_TARGET_COLONY_RANGE: 4, SHIP_MAX_CARGO: 20,
         FORAGE_MP_COST: 1, TRADE_MP_COST: 1, MARKET_SPAWN_CHANCE: 0.1,
         STORM_DEFAULT_TTL: 3,
@@ -135,13 +151,15 @@
       let gameState = {
           turnCount: 1, playerOrderQueue: [], aiOrderQueues: new Map(), turnLog: [],
           nextOrderId: 0, nextShipId: 1, nextHazardId: 1, playerShip: null, aiShips: [],
-          resources: { [CONSTS.RESOURCE_WHEAT]: 10, [CONSTS.RESOURCE_WOOD]: 20, [CONSTS.RESOURCE_GOLD]: 0 },
+          resources: { [CONSTS.RESOURCE_WHEAT]: 15, [CONSTS.RESOURCE_WOOD]: 30, [CONSTS.RESOURCE_GOLD]: 5 },
           eventDeck: [], discardPile: [], activeHazards: [], combat: null,
           isTurnProcessingPausedForCombat: false, postCombatTurnResumeCallback: null,
       };
       let reachableSet = new Set(); visibleReachableSet = new Set(); currentPathPreview = null;
       const actions = ["Sail", "Scout", "Build Outpost", "Forage", "Trade", "Attack"];
       let orderPanel, logPanel, tooltipElement, eventModal, eventModalBackdrop, eventModalTitle, eventModalBody, eventModalButtons;
+      let gameOverModal, gameOverBackdrop, gameOverTitle, gameOverBody, restartBtn;
+      let isGameOver = false;
       let combatUiContainer, combatRoundBanner, combatActionButtonsDiv, combatAttackBtn, combatMoveBtn, combatRetreatBtn;
 
       /* ===== HELPERS ===== */
@@ -173,6 +191,7 @@
         eventModal = select('#eventModal').elt; eventModalBackdrop = select('#eventModalBackdrop').elt; eventModalTitle = select('#eventModalTitle').elt; eventModalBody = select('#eventModalBody').elt; eventModalButtons = select('#eventModalButtons').elt;
         combatUiContainer = select('#combatUiContainer'); combatRoundBanner = select('#combatRoundBanner'); combatActionButtonsDiv = select('#combatActionButtons');
         combatAttackBtn = select('#combatAttackBtn').mousePressed(() => handleCombatPlayerAction('ATTACK')); combatMoveBtn = select('#combatMoveBtn').mousePressed(() => handleCombatPlayerAction('MOVE')); combatRetreatBtn = select('#combatRetreatBtn').mousePressed(() => handleCombatPlayerAction('RETREAT'));
+        gameOverModal = select('#gameOverModal').elt; gameOverBackdrop = select('#gameOverBackdrop').elt; gameOverTitle = select('#gameOverTitle').elt; gameOverBody = select('#gameOverBody').elt; restartBtn = select('#restartBtn').mousePressed(restartGame);
         const offsetX = width / 2 - (CONSTS.GRID_W / 2 * CONSTS.HEX_SIZE * CONSTS.HEX_WIDTH_FACTOR) ; const offsetY = height / 2 - (CONSTS.GRID_H / 2 * CONSTS.HEX_SIZE * CONSTS.SQRT3);
         for (let q = 0; q < CONSTS.GRID_W; q++) { for (let r = 0; r < CONSTS.GRID_H; r++) { const pos = axialToPixel(q, r); hexes.push({ q, r, x: pos.x + offsetX, y: pos.y + offsetY, terrain: TerrainType.PLAINS, isExplored: false, isVisible: false, colony: null, market: null, forageable: false }); } }
         
@@ -266,7 +285,7 @@
       function generateTerrain() { hexes.forEach(h => { if (h.q === 0 || h.q === CONSTS.GRID_W - 1 || h.r === 0 || h.r === CONSTS.GRID_H - 1) { h.terrain = TerrainType.OCEAN; }}); let centerQ = Math.floor(CONSTS.GRID_W / 2); let centerR = Math.floor(CONSTS.GRID_H / 2); for (let i = 0; i < 5; i++) { let q = Math.floor(random(centerQ-3, centerQ+3)); let r = Math.floor(random(centerR-3, centerR+3)); let rad = Math.floor(random(1,3)); for (const idx of spiral(q, r, rad)) { if(hexes[idx] && hexes[idx].terrain !== TerrainType.OCEAN) { hexes[idx].terrain = (random() < 0.6) ? TerrainType.OCEAN : TerrainType.COAST; }}} const coastCandidates = []; hexes.forEach((h, idx) => { if (!h || h.terrain === TerrainType.OCEAN) return; const neighbors = axialNeighbors(h.q, h.r); for (const nCoords of neighbors) { const nIdx = axialToIndex(nCoords.q, nCoords.r); if (nIdx !== null && hexes[nIdx]?.terrain === TerrainType.OCEAN) { coastCandidates.push(idx); break; } } }); coastCandidates.forEach(idx => { if (hexes[idx]) hexes[idx].terrain = TerrainType.COAST; }); hexes.forEach(h => { if (!h) return; if (h.terrain !== TerrainType.OCEAN && h.terrain !== TerrainType.COAST) { const rnd = random(); if (rnd < 0.45) h.terrain = TerrainType.PLAINS; else if (rnd < 0.70) h.terrain = TerrainType.FOREST; else if (rnd < 0.90) h.terrain = TerrainType.HILLS; else h.terrain = TerrainType.MOUNTAINS; } if (h.terrain === TerrainType.COAST || h.terrain === TerrainType.FOREST || h.terrain === TerrainType.HILLS) { h.forageable = true; } if (h.terrain === TerrainType.COAST) { if (random() < CONSTS.MARKET_SPAWN_CHANCE) { h.market = { buy: { ...priceTable.buy }, sell: { ...priceTable.sell } }; } } }); for (let i = 0; i < 2; i++) { hexes.forEach(h => { if(!h || h.terrain < TerrainType.HILLS) return; let plainsNeighbors = 0; const neighbors = axialNeighbors(h.q, h.r); for (const nCoords of neighbors) { const nIdx = axialToIndex(nCoords.q, nCoords.r); if (nIdx !== null && hexes[nIdx] && hexes[nIdx].terrain <= TerrainType.PLAINS) { plainsNeighbors++; } } if(plainsNeighbors >= 4 && h.terrain === TerrainType.MOUNTAINS) h.terrain = TerrainType.HILLS; else if (plainsNeighbors >= 5 && h.terrain === TerrainType.HILLS) h.terrain = TerrainType.PLAINS; }); } let marketCount = hexes.reduce((count, h) => count + (h && h.market ? 1 : 0), 0); console.log(`Terrain generated. Created ${marketCount} markets.`); }
 
       /* ===== DRAW LOOP ===== */
-      function draw() { if (gameState.combat) { drawCombat(); } else { background(CONSTS.UNEXPLORED_COLOUR); drawHexGrid(); drawHazards(); drawShips(); if (hoverIdx !== null && reachableSet.has(hoverIdx) && gameState.playerShip && !isEventModalOpen) { const startIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r); currentPathPreview = aStar(startIdx, hoverIdx, MOVE_COST); if (currentPathPreview) { drawPlannedPathPreview(currentPathPreview.path); } } else { currentPathPreview = null; } drawUI(); if (menuOpen && !isEventModalOpen) drawMenu(); } select('#endTurnBtn').elt.disabled = gameState.combat || !gameState.playerShip || gameState.playerOrderQueue.length === 0 || isEventModalOpen; if (!isEventModalOpen && !gameState.combat) updateTooltip(); else tooltipElement.hide(); }
+      function draw() { if (gameState.combat) { drawCombat(); } else { background(CONSTS.UNEXPLORED_COLOUR); drawHexGrid(); drawHazards(); drawShips(); if (hoverIdx !== null && reachableSet.has(hoverIdx) && gameState.playerShip && !isEventModalOpen) { const startIdx = axialToIndex(gameState.playerShip.q, gameState.playerShip.r); currentPathPreview = aStar(startIdx, hoverIdx, MOVE_COST); if (currentPathPreview) { drawPlannedPathPreview(currentPathPreview.path); } } else { currentPathPreview = null; } drawUI(); if (menuOpen && !isEventModalOpen) drawMenu(); } select('#endTurnBtn').elt.disabled = isGameOver || gameState.combat || !gameState.playerShip || gameState.playerOrderQueue.length === 0 || isEventModalOpen; if (!isEventModalOpen && !gameState.combat && !isGameOver) updateTooltip(); else tooltipElement.hide(); }
 
       /* ===== RENDERING (Strategy Map) ===== */
       function drawHexGrid() { if (!isEventModalOpen) hoverIdx = getHexUnderMouse(); else hoverIdx = null; hexes.forEach((h, idx) => { if (!h) return; if (!h.isExplored) { fill("#1a1a20"); noStroke(); drawHex(h.x, h.y); return; } const terrainStyle = TERRAIN_COLOURS[h.terrain]; if (!terrainStyle) { fill("#ff00ff"); stroke("#000"); } else { fill(terrainStyle.fill); stroke(terrainStyle.stroke); } strokeWeight(1); drawHex(h.x, h.y); if (h.colony) { push(); translate(h.x, h.y); fill(CONSTS.COLONY_COLOUR); noStroke(); rect(-6, -6, 12, 12); const flagPoleColor = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.AI_COLOUR : CONSTS.PLAYER_COLOUR; const flagColor = h.colony.faction === CONSTS.FACTION_AI ? CONSTS.AI_FLAG_COLOUR : CONSTS.PLAYER_FLAG_COLOUR; stroke(flagPoleColor); strokeWeight(1.5); line(0, -6, 0, -14); fill(flagColor); noStroke(); triangle(0, -14, 8, -11, 0, -8); pop(); } if (h.market) { push(); fill(CONSTS.MARKET_COLOUR); noStroke(); ellipse(h.x + CONSTS.HEX_SIZE * 0.3, h.y + CONSTS.HEX_SIZE * 0.4, 10, 10); pop(); } if (!h.isVisible) { fill(0, 0, 0, CONSTS.FOG_ALPHA_PERCENT * 255); noStroke(); drawHex(h.x, h.y); return; } if (!isEventModalOpen) { noStroke(); if (visibleReachableSet.has(idx)) { fill(CONSTS.RANGE_COLOUR); drawHex(h.x, h.y); } if (idx === hoverIdx) { fill(CONSTS.HIGHLIGHT_COLOUR); drawHex(h.x, h.y); } } }); }
@@ -329,6 +348,7 @@
         }
       }
       function mousePressed() {
+        if (isGameOver) return;
         if (gameState.combat) { handleCombatMousePressed(); return; }
         if (isEventModalOpen) return;
 
@@ -436,10 +456,72 @@
       function endTurn() { if (isEventModalOpen || gameState.combat || gameState.isTurnProcessingPausedForCombat) { addToLog("Cannot end turn: Event modal, combat in progress, or turn processing paused.", "System"); return; } select('#endTurnBtn').elt.disabled = true; menuOpen = false; selectedIdx = null; currentPathPreview = null; addToLog(`--- Player Ending Turn ${gameState.turnCount} ---`, "System"); planAITurn(); executeAllTurnOrders(); if (gameState.combat) { gameState.isTurnProcessingPausedForCombat = true; gameState.postCombatTurnResumeCallback = resumeEndTurnSequenceAfterCombat; addToLog("Turn processing paused for combat (initiated by order).", "System"); return; } if (checkForSpontaneousCombat()) { gameState.isTurnProcessingPausedForCombat = true; gameState.postCombatTurnResumeCallback = resumeEndTurnSequenceAfterCombat; addToLog("Turn processing paused for combat (spontaneous).", "System"); return; } resumeEndTurnSequenceAfterCombat(); }
       function resumeEndTurnSequenceAfterCombat() { gameState.isTurnProcessingPausedForCombat = false; gameState.postCombatTurnResumeCallback = null; if (gameState.combat) { addToLog("Error: Trying to resume turn sequence while still in combat.", "System"); return; } addToLog("Resuming end of turn sequence (hazards, upkeep, events, MP reset)...", "System"); applyHazards(); performColonyUpkeep(); performShipColonyTransfer(); updateShipStatuses(); gameState.turnCount++; const applyMPModifiers = (ship) => { let baseMP = CONSTS.MOVE_POINTS_PER_TURN; let mpMod = 0; let reason = []; if (!ship.status) ship.status = {}; if (ship.status.stormPenaltyNextTurn) { mpMod -= 1; reason.push("Storm"); delete ship.status.stormPenaltyNextTurn; } if (ship.status.crewSick > 0) { mpMod -= 1; reason.push("Sickness"); } if (ship.status.leak > 0) { mpMod -= 1; reason.push("Leak"); } if (ship.status.windBoost > 0) { mpMod += ship.status.windBoost; reason.push(`Wind (+${ship.status.windBoost})`); delete ship.status.windBoost; } ship.movesLeft = Math.max(1, baseMP + mpMod); if (mpMod !== 0) { addToLog(`Ship ${ship.id} MP modified for Turn ${gameState.turnCount} due to: ${reason.join(', ')}. MP: ${ship.movesLeft}/${baseMP}`, ship.faction); } else { ship.movesLeft = baseMP; } }; if (gameState.playerShip) { applyMPModifiers(gameState.playerShip); } gameState.aiShips.forEach(applyMPModifiers); if (gameState.playerShip) { reachableSet = computeReachable(gameState.playerShip.q, gameState.playerShip.r, gameState.playerShip.movesLeft); } else { reachableSet.clear(); visibleReachableSet.clear(); } updateVisibility(); const playerMPStr = gameState.playerShip ? `${gameState.playerShip.movesLeft}/${CONSTS.MOVE_POINTS_PER_TURN}` : '-/-'; addToLog(`--- Starting Turn ${gameState.turnCount}. Player MP: ${playerMPStr} ---`, "System"); processEventPhase(); }
 
+      /* ========================================================== GAME END CONDITIONS ========================================================== */
+      function checkGameEndConditions() {
+        if (isGameOver) return true;
+        // Lose condition: Player ship destroyed
+        if (!gameState.playerShip) {
+          showGameOver(false, "Your ship has been lost at sea. Your expedition has failed.");
+          return true;
+        }
+        // Win condition: All AI ships destroyed AND no AI colonies remain
+        const aiColonies = hexes.filter(h => h && h.colony && h.colony.faction === CONSTS.FACTION_AI);
+        if (gameState.aiShips.length === 0 && aiColonies.length === 0) {
+          showGameOver(true, `Victory! You have defeated all rival forces in ${gameState.turnCount} turns.`);
+          return true;
+        }
+        return false;
+      }
+      function showGameOver(isVictory, message) {
+        isGameOver = true;
+        gameOverModal.className = 'modal ' + (isVictory ? 'victory' : 'defeat');
+        gameOverTitle.textContent = isVictory ? 'Victory!' : 'Defeat';
+        gameOverBody.textContent = message;
+        gameOverBackdrop.style.display = 'block';
+        gameOverModal.style.display = 'block';
+        select('#endTurnBtn').elt.disabled = true;
+        addToLog(isVictory ? "=== VICTORY ===" : "=== DEFEAT ===", "System");
+      }
+      function restartGame() {
+        // Hide game over modal
+        gameOverBackdrop.style.display = 'none';
+        gameOverModal.style.display = 'none';
+        isGameOver = false;
+        // Reset game state
+        hexes = [];
+        hoverIdx = null; selectedIdx = null; menuOpen = false; isEventModalOpen = false;
+        gameState = {
+          turnCount: 1, playerOrderQueue: [], aiOrderQueues: new Map(), turnLog: [],
+          nextOrderId: 0, nextShipId: 1, nextHazardId: 1, playerShip: null, aiShips: [],
+          resources: { [CONSTS.RESOURCE_WHEAT]: 15, [CONSTS.RESOURCE_WOOD]: 30, [CONSTS.RESOURCE_GOLD]: 5 },
+          eventDeck: [], discardPile: [], activeHazards: [], combat: null,
+          isTurnProcessingPausedForCombat: false, postCombatTurnResumeCallback: null,
+        };
+        reachableSet = new Set(); visibleReachableSet = new Set(); currentPathPreview = null;
+        // Reinitialize hexes
+        const offsetX = width / 2 - (CONSTS.GRID_W / 2 * CONSTS.HEX_SIZE * CONSTS.HEX_WIDTH_FACTOR);
+        const offsetY = height / 2 - (CONSTS.GRID_H / 2 * CONSTS.HEX_SIZE * CONSTS.SQRT3);
+        for (let q = 0; q < CONSTS.GRID_W; q++) {
+          for (let r = 0; r < CONSTS.GRID_H; r++) {
+            const pos = axialToPixel(q, r);
+            hexes.push({ q, r, x: pos.x + offsetX, y: pos.y + offsetY, terrain: TerrainType.PLAINS, isExplored: false, isVisible: false, colony: null, market: null, forageable: false });
+          }
+        }
+        generateTerrain();
+        spawnAIShip();
+        autoSpawnPlayerShip();
+        gameState.turnLog = [];
+        logPanel.innerHTML = '';
+        addToLog("A new voyage begins!", "System");
+        gameState.discardPile = []; gameState.eventDeck = shuffleByWeight(EVENT_POOL);
+        updateOrderPanel();
+        select('#endTurnBtn').elt.disabled = true;
+      }
+
       /* ========================================================== TACTICAL COMBAT ========================================================== */
       function initCombatBoard(attackerEntity, defenderEntity, context) { const board = Array(CONSTS.COMBAT_GRID_DIM).fill(null).map(() => Array(CONSTS.COMBAT_GRID_DIM).fill(null).map(() => ({ terrain: 'Open' }))); const units = []; const combatantsOriginalData = []; const attackerStartY = Math.floor(CONSTS.COMBAT_GRID_DIM / 2) + CONSTS.COMBAT_UNIT_START_Y_OFFSET_FROM_CENTER; const defenderStartY = attackerStartY; units.push({ id: `combatUnit_${attackerEntity.id}`, originalId: attackerEntity.id, originalType: 'SHIP', faction: attackerEntity.faction, hp: CONSTS.COMBAT_DEFAULT_UNIT_HP, x: CONSTS.COMBAT_ATTACKER_START_X_OFFSET, y: attackerStartY, }); combatantsOriginalData.push({ id: attackerEntity.id, type: 'SHIP', q: attackerEntity.q, r: attackerEntity.r, faction: attackerEntity.faction }); const defenderOriginalQ = context === CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY ? defenderEntity.q : defenderEntity.q; const defenderOriginalR = context === CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY ? defenderEntity.r : defenderEntity.r; if (context === CONSTS.COMBAT_CONTEXT_SHIP_VS_COLONY) { const colony = defenderEntity.colony; units.push({ id: `combatUnit_colony_${colony.name.replace(/\s+/g, '_')}`, originalId: colony.name, originalType: 'COLONY', faction: colony.faction, hp: CONSTS.COMBAT_DEFAULT_COLONY_HP, x: CONSTS.COMBAT_GRID_DIM - CONSTS.COMBAT_DEFENDER_START_X_OFFSET_FROM_EDGE, y: defenderStartY, }); combatantsOriginalData.push({ id: colony.name, type: 'COLONY', q: defenderOriginalQ, r: defenderOriginalR, faction: colony.faction }); } else { units.push({ id: `combatUnit_${defenderEntity.id}`, originalId: defenderEntity.id, originalType: 'SHIP', faction: defenderEntity.faction, hp: CONSTS.COMBAT_DEFAULT_UNIT_HP, x: CONSTS.COMBAT_GRID_DIM - CONSTS.COMBAT_DEFENDER_START_X_OFFSET_FROM_EDGE, y: defenderStartY, }); combatantsOriginalData.push({ id: defenderEntity.id, type: 'SHIP', q: defenderOriginalQ, r: defenderOriginalR, faction: defenderEntity.faction }); } let turnFaction; let activeUnitIdxLocal; const playerIsAttacker = attackerEntity.faction === CONSTS.FACTION_PLAYER; const defenderFaction = units[1].faction; const playerIsDefender = defenderFaction === CONSTS.FACTION_PLAYER; if (playerIsAttacker || playerIsDefender) { turnFaction = CONSTS.FACTION_PLAYER; activeUnitIdxLocal = playerIsAttacker ? 0 : 1; } else { turnFaction = attackerEntity.faction; activeUnitIdxLocal = 0; } return { board, units, round: 1, turn: turnFaction, context, combatantsOriginalData, awaitingMoveClick: false, activeUnitIndex: activeUnitIdxLocal, gridStartX: (width - CONSTS.COMBAT_GRID_DIM * CONSTS.COMBAT_CELL_PIXEL_SIZE) / 2, gridStartY: (height - CONSTS.COMBAT_GRID_DIM * CONSTS.COMBAT_CELL_PIXEL_SIZE) / 2, }; }
       function enterCombat(attackerEntity, defenderEntity, context) { if (gameState.combat) return; addToLog(`Entering Combat! Context: ${context}`, "Combat"); gameState.combat = initCombatBoard(attackerEntity, defenderEntity, context); select('#uiContainer').elt.style.display = 'none'; select('#logPanelContainer').elt.style.display = 'none'; select('#endTurnBtn').elt.style.display = 'none'; menuOpen = false; combatUiContainer.style('display', 'flex'); updateCombatUi(); if (gameState.combat.turn === CONSTS.FACTION_AI) { setTimeout(runCombatAITurn, CONSTS.COMBAT_UI_AI_THINKING_DELAY_MS); } }
-      function endCombat(outcome, winningFaction) { if (!gameState.combat) return; addToLog(`Combat Ended. Outcome: ${outcome}, Winner: ${winningFaction || 'None'}`, "Combat"); const combatData = gameState.combat; combatData.units.forEach(unit => { const originalData = combatData.combatantsOriginalData.find(co => co.id === unit.originalId && co.type === unit.originalType); if (!originalData) { console.error("Could not find original data for combat unit:", unit); return; } if (unit.hp <= 0) { addToLog(`${unit.faction} ${unit.originalType} '${unit.originalId}' destroyed!`, "Combat"); if (unit.originalType === 'SHIP') { if (gameState.playerShip && gameState.playerShip.id === unit.originalId) { gameState.playerShip = null; addToLog("Player ship lost!", "System"); } else { gameState.aiShips = gameState.aiShips.filter(s => s.id !== unit.originalId); } } else if (unit.originalType === 'COLONY') { const colonyHex = hexes[axialToIndex(originalData.q, originalData.r)]; if (colonyHex && colonyHex.colony) { colonyHex.colony = null; addToLog(`Colony at (${originalData.q},${originalData.r}) destroyed!`, "System"); } } } else { if (unit.originalType === 'SHIP') { let shipToUpdate = (gameState.playerShip && gameState.playerShip.id === unit.originalId) ? gameState.playerShip : gameState.aiShips.find(s => s.id === unit.originalId); if (shipToUpdate) { shipToUpdate.q = originalData.q; shipToUpdate.r = originalData.r; shipToUpdate.movesLeft = 0; addToLog(`${unit.faction} Ship ${unit.originalId} returns to (${originalData.q},${originalData.r}), MP set to 0.`, "Combat"); } } } }); gameState.combat = null; select('#uiContainer').elt.style.display = 'flex'; select('#logPanelContainer').elt.style.display = 'block'; select('#endTurnBtn').elt.style.display = 'block'; combatUiContainer.style('display', 'none'); updateVisibility(); if (gameState.playerShip) { reachableSet = computeReachable(gameState.playerShip.q, gameState.playerShip.r, gameState.playerShip.movesLeft); } else { reachableSet.clear(); visibleReachableSet.clear(); } if (gameState.isTurnProcessingPausedForCombat && gameState.postCombatTurnResumeCallback) { gameState.postCombatTurnResumeCallback(); } else { select('#endTurnBtn').elt.disabled = isEventModalOpen || (gameState.playerShip && gameState.playerOrderQueue.length === 0); } }
+      function endCombat(outcome, winningFaction) { if (!gameState.combat) return; addToLog(`Combat Ended. Outcome: ${outcome}, Winner: ${winningFaction || 'None'}`, "Combat"); const combatData = gameState.combat; combatData.units.forEach(unit => { const originalData = combatData.combatantsOriginalData.find(co => co.id === unit.originalId && co.type === unit.originalType); if (!originalData) { console.error("Could not find original data for combat unit:", unit); return; } if (unit.hp <= 0) { addToLog(`${unit.faction} ${unit.originalType} '${unit.originalId}' destroyed!`, "Combat"); if (unit.originalType === 'SHIP') { if (gameState.playerShip && gameState.playerShip.id === unit.originalId) { gameState.playerShip = null; addToLog("Player ship lost!", "System"); } else { gameState.aiShips = gameState.aiShips.filter(s => s.id !== unit.originalId); } } else if (unit.originalType === 'COLONY') { const colonyHex = hexes[axialToIndex(originalData.q, originalData.r)]; if (colonyHex && colonyHex.colony) { colonyHex.colony = null; addToLog(`Colony at (${originalData.q},${originalData.r}) destroyed!`, "System"); } } } else { if (unit.originalType === 'SHIP') { let shipToUpdate = (gameState.playerShip && gameState.playerShip.id === unit.originalId) ? gameState.playerShip : gameState.aiShips.find(s => s.id === unit.originalId); if (shipToUpdate) { shipToUpdate.q = originalData.q; shipToUpdate.r = originalData.r; shipToUpdate.movesLeft = 0; addToLog(`${unit.faction} Ship ${unit.originalId} returns to (${originalData.q},${originalData.r}), MP set to 0.`, "Combat"); } } } }); gameState.combat = null; select('#uiContainer').elt.style.display = 'flex'; select('#logPanelContainer').elt.style.display = 'block'; select('#endTurnBtn').elt.style.display = 'block'; combatUiContainer.style('display', 'none'); updateVisibility(); if (gameState.playerShip) { reachableSet = computeReachable(gameState.playerShip.q, gameState.playerShip.r, gameState.playerShip.movesLeft); } else { reachableSet.clear(); visibleReachableSet.clear(); } if (checkGameEndConditions()) { return; } if (gameState.isTurnProcessingPausedForCombat && gameState.postCombatTurnResumeCallback) { gameState.postCombatTurnResumeCallback(); } else { select('#endTurnBtn').elt.disabled = isEventModalOpen || (gameState.playerShip && gameState.playerOrderQueue.length === 0); } }
       function drawCombat() { background(50); if (!gameState.combat) return; const { board, units, gridStartX, gridStartY } = gameState.combat; for (let r = 0; r < CONSTS.COMBAT_GRID_DIM; r++) { for (let c = 0; c < CONSTS.COMBAT_GRID_DIM; c++) { const x = gridStartX + c * CONSTS.COMBAT_CELL_PIXEL_SIZE; const y = gridStartY + r * CONSTS.COMBAT_CELL_PIXEL_SIZE; stroke(100); fill(board[r][c].terrain === 'Open' ? 120 : 80); rect(x, y, CONSTS.COMBAT_CELL_PIXEL_SIZE, CONSTS.COMBAT_CELL_PIXEL_SIZE); } } units.forEach(unit => { if (unit.hp <= 0) return; const unitCenterX = gridStartX + unit.x * CONSTS.COMBAT_CELL_PIXEL_SIZE + CONSTS.COMBAT_CELL_PIXEL_SIZE / 2; const unitCenterY = gridStartY + unit.y * CONSTS.COMBAT_CELL_PIXEL_SIZE + CONSTS.COMBAT_CELL_PIXEL_SIZE / 2; const unitSize = CONSTS.COMBAT_CELL_PIXEL_SIZE * 0.4; push(); translate(unitCenterX, unitCenterY); fill(unit.faction === CONSTS.FACTION_PLAYER ? CONSTS.PLAYER_COLOUR : CONSTS.AI_COLOUR); noStroke(); if (unit.originalType === 'SHIP') { triangle(0, -unitSize, unitSize * 0.8, unitSize * 0.6, -unitSize * 0.8, unitSize * 0.6); } else { rectMode(CENTER); rect(0,0, unitSize * 1.5, unitSize * 1.5); } fill(255,0,0); for (let i = 0; i < unit.hp; i++) { ellipse(-unitSize * 0.5 + i * (unitSize * 0.4), unitSize * 1.2, unitSize*0.3, unitSize*0.3); } pop(); }); if (gameState.combat.awaitingMoveClick) { const activeUnit = gameState.combat.units[gameState.combat.activeUnitIndex]; if (activeUnit.faction === CONSTS.FACTION_PLAYER) { const validMoves = getValidCombatMoves(activeUnit); validMoves.forEach(move => { fill(0, 255, 0, 100); rect(gridStartX + move.x * CONSTS.COMBAT_CELL_PIXEL_SIZE, gridStartY + move.y * CONSTS.COMBAT_CELL_PIXEL_SIZE, CONSTS.COMBAT_CELL_PIXEL_SIZE, CONSTS.COMBAT_CELL_PIXEL_SIZE); }); } } }
       function updateCombatUi() { if (!gameState.combat) return; combatRoundBanner.html(`Round ${gameState.combat.round} / ${CONSTS.COMBAT_MAX_ROUNDS}`); if (gameState.combat.turn === CONSTS.FACTION_PLAYER) { combatActionButtonsDiv.style('display', 'block'); enableCombatActions(); } else { combatActionButtonsDiv.style('display', 'none'); disableCombatActions(); } }
       function enableCombatActions() { if (!gameState.combat || gameState.combat.turn !== CONSTS.FACTION_PLAYER) return; combatAttackBtn.removeAttribute('disabled'); combatMoveBtn.removeAttribute('disabled'); combatRetreatBtn.removeAttribute('disabled'); }
