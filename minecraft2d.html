@@ -121,6 +121,90 @@
             border-radius: 3px;
             transition: width 0.05s;
         }
+        /* Health Bar */
+        #healthBar {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 2px;
+            padding: 5px 10px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 5px;
+        }
+        .heart {
+            width: 18px;
+            height: 18px;
+            position: relative;
+        }
+        .heart::before {
+            content: '♥';
+            position: absolute;
+            font-size: 20px;
+            line-height: 18px;
+            color: #333;
+            text-shadow: 0 0 2px #000;
+        }
+        .heart::after {
+            content: '♥';
+            position: absolute;
+            font-size: 20px;
+            line-height: 18px;
+            color: #ff0000;
+            text-shadow: 0 0 2px #000;
+            clip-path: inset(0 0 0 0);
+            transition: clip-path 0.1s;
+        }
+        .heart.empty::after {
+            clip-path: inset(0 100% 0 0);
+        }
+        .heart.half::after {
+            clip-path: inset(0 50% 0 0);
+        }
+        #damageOverlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255, 0, 0, 0.3);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.1s;
+            z-index: 500;
+        }
+        #damageOverlay.flash {
+            opacity: 1;
+        }
+        #deathScreen {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(100, 0, 0, 0.7);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        #deathScreen.show {
+            display: flex;
+        }
+        #deathScreen h1 {
+            color: #fff;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px #000;
+        }
+        #deathScreen button {
+            padding: 15px 30px;
+            font-size: 20px;
+            background: #555;
+            color: white;
+            border: 2px solid #777;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #deathScreen button:hover {
+            background: #666;
+        }
 
         /* Mobile Touch Controls */
         #touchControls {
@@ -249,6 +333,12 @@
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
+    <div id="healthBar"></div>
+    <div id="damageOverlay"></div>
+    <div id="deathScreen">
+        <h1>You Died!</h1>
+        <button id="respawnBtn">Respawn</button>
+    </div>
     <div id="ui"></div>
     <div id="info">
         <div>FPS: <span id="fps">0</span></div>
@@ -903,6 +993,15 @@
             this.onGround = false;
             this.facingRight = true;
 
+            // Health system
+            this.maxHealth = 20;
+            this.health = this.maxHealth;
+            this.isDead = false;
+
+            // Fall damage tracking
+            this.fallStartY = y;
+            this.isFalling = false;
+
             // Inventory: array of {blockId, count}
             this.inventory = new Array(9).fill(null);
             this.selectedSlot = 0;
@@ -911,6 +1010,30 @@
             this.addToInventory(BLOCKS.DIRT, 64);
             this.addToInventory(BLOCKS.STONE, 32);
             this.addToInventory(BLOCKS.WOOD, 16);
+        }
+
+        takeDamage(amount) {
+            if (this.isDead) return;
+            this.health = Math.max(0, this.health - amount);
+            if (this.health <= 0) {
+                this.isDead = true;
+            }
+            return this.health;
+        }
+
+        heal(amount) {
+            this.health = Math.min(this.maxHealth, this.health + amount);
+        }
+
+        respawn(x, y) {
+            this.x = x;
+            this.y = y;
+            this.vx = 0;
+            this.vy = 0;
+            this.health = this.maxHealth;
+            this.isDead = false;
+            this.fallStartY = y;
+            this.isFalling = false;
         }
 
         addToInventory(block, count = 1) {
@@ -949,6 +1072,8 @@
         }
 
         update(world, keys) {
+            if (this.isDead) return 0;
+
             // Horizontal movement
             const moveSpeed = CONFIG.MOVE_SPEED;
             if (keys.left) {
@@ -967,6 +1092,19 @@
                 this.onGround = false;
             }
 
+            // Track fall start
+            const wasOnGround = this.onGround;
+            if (wasOnGround && this.vy >= 0) {
+                this.fallStartY = this.y;
+                this.isFalling = false;
+            }
+            if (!this.onGround && this.vy > 0) {
+                if (!this.isFalling) {
+                    this.fallStartY = this.y;
+                    this.isFalling = true;
+                }
+            }
+
             // Gravity
             this.vy += CONFIG.GRAVITY;
             if (this.vy > 15) this.vy = 15; // Terminal velocity
@@ -974,6 +1112,20 @@
             // Move with collision detection
             this.moveWithCollision(world, this.vx * 0.1, 0);
             this.moveWithCollision(world, 0, this.vy * 0.1);
+
+            // Calculate fall damage on landing
+            let fallDamage = 0;
+            if (this.onGround && this.isFalling) {
+                const fallDistance = this.y - this.fallStartY;
+                // Take damage for falls > 3 blocks (1 damage per block after 3)
+                if (fallDistance > 3) {
+                    fallDamage = Math.floor(fallDistance - 3);
+                    this.takeDamage(fallDamage);
+                }
+                this.isFalling = false;
+            }
+
+            return fallDamage;
         }
 
         moveWithCollision(world, dx, dy) {
@@ -1055,6 +1207,7 @@
                 this.player = new Player(saveData.player.x, saveData.player.y);
                 this.player.inventory = saveData.player.inventory;
                 this.player.selectedSlot = saveData.player.selectedSlot;
+                this.player.health = saveData.player.health ?? this.player.maxHealth;
 
                 // Restore time
                 this.gameTime = saveData.gameTime || 0;
@@ -1144,6 +1297,10 @@
 
             // UI
             this.setupUI();
+            this.updateHealthBar();
+
+            // Respawn button handler
+            document.getElementById('respawnBtn').onclick = () => this.respawnPlayer();
 
             // Auto-save every 30 seconds
             this.autoSaveInterval = setInterval(() => this.saveGame(), 30000);
@@ -1539,8 +1696,28 @@
         }
 
         update(dt) {
-            // Update player
-            this.player.update(this.world, this.keys);
+            // Check for death
+            if (this.player.isDead) {
+                document.getElementById('deathScreen').classList.add('show');
+                return;
+            }
+
+            // Update player and check for fall damage
+            const fallDamage = this.player.update(this.world, this.keys);
+
+            // Show damage effect
+            if (fallDamage > 0) {
+                this.showDamageEffect();
+            }
+
+            // Update health bar
+            this.updateHealthBar();
+
+            // Check for death after damage
+            if (this.player.isDead) {
+                document.getElementById('deathScreen').classList.add('show');
+                return;
+            }
 
             // Smooth camera follow
             const smoothing = 0.1;
@@ -1553,6 +1730,63 @@
             // Update time
             this.gameTime += dt / 1000;
             this.dayProgress = (this.gameTime / CONFIG.DAY_LENGTH) % 1;
+        }
+
+        showDamageEffect() {
+            const overlay = document.getElementById('damageOverlay');
+            overlay.classList.add('flash');
+            setTimeout(() => overlay.classList.remove('flash'), 150);
+        }
+
+        updateHealthBar() {
+            const healthBar = document.getElementById('healthBar');
+            const hearts = Math.ceil(this.player.maxHealth / 2); // 10 hearts for 20 HP
+
+            // Build hearts HTML if needed
+            if (healthBar.children.length !== hearts) {
+                healthBar.innerHTML = '';
+                for (let i = 0; i < hearts; i++) {
+                    const heart = document.createElement('div');
+                    heart.className = 'heart';
+                    healthBar.appendChild(heart);
+                }
+            }
+
+            // Update heart states
+            const fullHearts = Math.floor(this.player.health / 2);
+            const hasHalfHeart = this.player.health % 2 === 1;
+
+            for (let i = 0; i < hearts; i++) {
+                const heart = healthBar.children[i];
+                heart.classList.remove('empty', 'half');
+
+                if (i < fullHearts) {
+                    // Full heart
+                } else if (i === fullHearts && hasHalfHeart) {
+                    heart.classList.add('half');
+                } else {
+                    heart.classList.add('empty');
+                }
+            }
+        }
+
+        respawnPlayer() {
+            // Find spawn point
+            const spawnX = Math.floor(CONFIG.WORLD_WIDTH / 2);
+            let spawnY = 0;
+            for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
+                if (this.world.getBlock(spawnX, y).solid) {
+                    spawnY = y - 1;
+                    break;
+                }
+            }
+
+            this.player.respawn(spawnX + 0.5, spawnY);
+            this.cameraX = this.player.x;
+            this.cameraY = this.player.y;
+
+            document.getElementById('deathScreen').classList.remove('show');
+            this.updateHealthBar();
         }
 
         render() {
@@ -1764,7 +1998,8 @@
                         x: this.player.x,
                         y: this.player.y,
                         inventory: this.player.inventory,
-                        selectedSlot: this.player.selectedSlot
+                        selectedSlot: this.player.selectedSlot,
+                        health: this.player.health
                     },
                     world: {
                         // Convert Map to array of [key, value] pairs
