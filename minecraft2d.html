@@ -226,6 +226,25 @@
             font-size: 12px;
             padding: 6px;
         }
+        #saveNotification {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: #4CAF50;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        #saveNotification.show {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -243,9 +262,12 @@
         Left Click - Break block<br>
         Right Click - Place block<br>
         1-9 - Select hotbar<br>
-        Scroll - Change slot
+        Scroll - Change slot<br>
+        P - Save game<br>
+        N - New game
     </div>
     <div id="miningProgress"><div class="fill"></div></div>
+    <div id="saveNotification">Game Saved</div>
 
     <!-- Mobile Touch Controls -->
     <div id="touchControls">
@@ -1015,34 +1037,72 @@
             this.resize();
             window.addEventListener('resize', () => this.resize());
 
-            // Generate world
-            this.world = new World(CONFIG.WORLD_WIDTH, CONFIG.WORLD_HEIGHT);
+            // Try to load saved game
+            const saveData = this.loadGame();
 
-            // Find spawn point
-            const spawnX = Math.floor(CONFIG.WORLD_WIDTH / 2);
-            let spawnY = 0;
-            for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
-                if (this.world.getBlock(spawnX, y).solid) {
-                    spawnY = y - 1;
-                    break;
-                }
-            }
+            // Generate world (with saved seed if available)
+            const seed = saveData ? saveData.seed : undefined;
+            this.world = new World(CONFIG.WORLD_WIDTH, CONFIG.WORLD_HEIGHT, seed);
 
-            this.player = new Player(spawnX + 0.5, spawnY);
+            if (saveData) {
+                // Restore saved game
+                console.log('Restoring saved game...');
 
-            // Generate some trees near spawn
-            for (let i = -10; i < 10; i++) {
-                const tx = spawnX + i * 8 + Math.floor(Math.random() * 4);
-                let ty = 0;
+                // Restore world modifications
+                this.world.modifiedBlocks = new Map(saveData.world.modifiedBlocks);
+
+                // Restore player
+                this.player = new Player(saveData.player.x, saveData.player.y);
+                this.player.inventory = saveData.player.inventory;
+                this.player.selectedSlot = saveData.player.selectedSlot;
+
+                // Restore time
+                this.gameTime = saveData.gameTime || 0;
+
+                this.showNotification('Game Loaded');
+            } else {
+                // New game - find spawn point
+                const spawnX = Math.floor(CONFIG.WORLD_WIDTH / 2);
+                let spawnY = 0;
                 for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
-                    if (this.world.getBlock(tx, y).id === BLOCKS.GRASS.id) {
-                        ty = y;
+                    if (this.world.getBlock(spawnX, y).solid) {
+                        spawnY = y - 1;
                         break;
                     }
                 }
-                if (ty > 0 && Math.random() < 0.6) {
-                    this.world.generateTree(tx, ty);
+
+                this.player = new Player(spawnX + 0.5, spawnY);
+
+                // Generate some trees near spawn (but not AT spawn)
+                for (let i = -10; i < 10; i++) {
+                    const tx = spawnX + i * 8 + Math.floor(Math.random() * 4);
+
+                    // Skip trees too close to spawn point to avoid trapping player
+                    if (Math.abs(tx - spawnX) < 4) continue;
+
+                    let ty = 0;
+                    for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
+                        if (this.world.getBlock(tx, y).id === BLOCKS.GRASS.id) {
+                            ty = y;
+                            break;
+                        }
+                    }
+                    if (ty > 0 && Math.random() < 0.6) {
+                        this.world.generateTree(tx, ty);
+                    }
                 }
+
+                // Clear spawn area (in case of any obstructions)
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -3; dy <= 0; dy++) {
+                        const block = this.world.getBlock(spawnX + dx, spawnY + dy);
+                        if (block.solid && block.id !== BLOCKS.BEDROCK.id) {
+                            this.world.setBlock(spawnX + dx, spawnY + dy, BLOCKS.AIR);
+                        }
+                    }
+                }
+
+                this.gameTime = 0;
             }
 
             // Camera
@@ -1066,9 +1126,9 @@
                 this.setupTouchControls();
             }
 
-            // Time
-            this.gameTime = 0;
-            this.dayProgress = 0.25; // Start at morning
+            // Day/night cycle
+            this.dayProgress = (this.gameTime / CONFIG.DAY_LENGTH) % 1;
+            if (this.dayProgress === 0) this.dayProgress = 0.25; // Start at morning for new games
 
             // FPS
             this.frameCount = 0;
@@ -1084,6 +1144,12 @@
 
             // UI
             this.setupUI();
+
+            // Auto-save every 30 seconds
+            this.autoSaveInterval = setInterval(() => this.saveGame(), 30000);
+
+            // Save on page unload
+            window.addEventListener('beforeunload', () => this.saveGame());
 
             // Start game loop
             this.lastTime = performance.now();
@@ -1118,6 +1184,17 @@
                     case 'Digit7': case 'Digit8': case 'Digit9':
                         this.player.selectedSlot = parseInt(e.code.slice(-1)) - 1;
                         this.updateUI();
+                        break;
+                    case 'KeyP':
+                        // Manual save
+                        this.saveGame();
+                        break;
+                    case 'KeyN':
+                        // New game (delete save and reload)
+                        if (confirm('Start a new game? Your current progress will be lost.')) {
+                            this.deleteSave();
+                            location.reload();
+                        }
                         break;
                 }
             });
@@ -1674,6 +1751,63 @@
             const rb = Math.round(ab + (bb - ab) * t);
 
             return `#${((1 << 24) + (rr << 16) + (rg << 8) + rb).toString(16).slice(1)}`;
+        }
+
+        // --- SAVE/LOAD SYSTEM ---
+        saveGame() {
+            try {
+                const saveData = {
+                    version: 1,
+                    timestamp: Date.now(),
+                    seed: this.world.seed,
+                    player: {
+                        x: this.player.x,
+                        y: this.player.y,
+                        inventory: this.player.inventory,
+                        selectedSlot: this.player.selectedSlot
+                    },
+                    world: {
+                        // Convert Map to array of [key, value] pairs
+                        modifiedBlocks: Array.from(this.world.modifiedBlocks.entries())
+                    },
+                    gameTime: this.gameTime
+                };
+
+                localStorage.setItem('minecraft2d_save', JSON.stringify(saveData));
+                this.showNotification('Game Saved');
+                console.log(`Game saved: ${saveData.world.modifiedBlocks.length} block changes`);
+                return true;
+            } catch (e) {
+                console.error('Failed to save game:', e);
+                this.showNotification('Save Failed!');
+                return false;
+            }
+        }
+
+        loadGame() {
+            try {
+                const saveJson = localStorage.getItem('minecraft2d_save');
+                if (!saveJson) return null;
+
+                const saveData = JSON.parse(saveJson);
+                console.log(`Loading save from ${new Date(saveData.timestamp).toLocaleString()}`);
+                return saveData;
+            } catch (e) {
+                console.error('Failed to load game:', e);
+                return null;
+            }
+        }
+
+        deleteSave() {
+            localStorage.removeItem('minecraft2d_save');
+            this.showNotification('Save Deleted');
+        }
+
+        showNotification(message) {
+            const notif = document.getElementById('saveNotification');
+            notif.textContent = message;
+            notif.classList.add('show');
+            setTimeout(() => notif.classList.remove('show'), 1500);
         }
 
         loop() {
