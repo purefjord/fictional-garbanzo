@@ -1030,9 +1030,13 @@
 
             this.player = new Player(spawnX + 0.5, spawnY);
 
-            // Generate some trees near spawn
+            // Generate some trees near spawn (but not AT spawn)
             for (let i = -10; i < 10; i++) {
                 const tx = spawnX + i * 8 + Math.floor(Math.random() * 4);
+
+                // Skip trees too close to spawn point to avoid trapping player
+                if (Math.abs(tx - spawnX) < 4) continue;
+
                 let ty = 0;
                 for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
                     if (this.world.getBlock(tx, y).id === BLOCKS.GRASS.id) {
@@ -1042,6 +1046,16 @@
                 }
                 if (ty > 0 && Math.random() < 0.6) {
                     this.world.generateTree(tx, ty);
+                }
+            }
+
+            // Clear spawn area (in case of any obstructions)
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -3; dy <= 0; dy++) {
+                    const block = this.world.getBlock(spawnX + dx, spawnY + dy);
+                    if (block.solid && block.id !== BLOCKS.BEDROCK.id) {
+                        this.world.setBlock(spawnX + dx, spawnY + dy, BLOCKS.AIR);
+                    }
                 }
             }
 
