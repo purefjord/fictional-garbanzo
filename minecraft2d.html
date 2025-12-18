@@ -699,7 +699,7 @@
         STONE: { id: 3, name: 'Stone', solid: true, hardness: 1.5, drops: 'COBBLESTONE', toolType: 'pickaxe' },
         COBBLESTONE: { id: 4, name: 'Cobblestone', solid: true, hardness: 2, toolType: 'pickaxe' },
         WOOD: { id: 5, name: 'Wood', solid: true, hardness: 2, toolType: 'axe' },
-        LEAVES: { id: 6, name: 'Leaves', solid: true, hardness: 0.2, transparent: true },
+        LEAVES: { id: 6, name: 'Leaves', solid: true, hardness: 0.2, transparent: true, randomDrop: { itemId: 204, chance: 0.1 } }, // 10% chance for apple
         SAND: { id: 7, name: 'Sand', solid: true, hardness: 0.5, toolType: 'shovel' },
         WATER: { id: 8, name: 'Water', solid: false, transparent: true },
         COAL_ORE: { id: 9, name: 'Coal Ore', solid: true, hardness: 3, toolType: 'pickaxe', dropsItem: 201 }, // Drops Coal
@@ -759,6 +759,7 @@
         COAL: { id: 201, name: 'Coal', isItem: true, stackable: true },
         IRON_INGOT: { id: 202, name: 'Iron Ingot', isItem: true, stackable: true },
         DIAMOND: { id: 203, name: 'Diamond', isItem: true, stackable: true },
+        APPLE: { id: 204, name: 'Apple', isItem: true, stackable: true, food: true, healAmount: 4 },
     };
 
     // Create ID to item mapping
@@ -1377,6 +1378,9 @@
                 case 'DIAMOND':
                     this.drawDiamond(ctx, size);
                     break;
+                case 'APPLE':
+                    this.drawApple(ctx, size);
+                    break;
                 default:
                     ctx.fillStyle = '#ff00ff';
                     ctx.fillRect(size * 0.25, size * 0.25, size * 0.5, size * 0.5);
@@ -1502,6 +1506,43 @@
             ctx.lineTo(10 * s, 12 * s);
             ctx.lineTo(16 * s, 12 * s);
             ctx.closePath();
+            ctx.fill();
+        },
+
+        drawApple(ctx, size) {
+            const s = size / 32;
+
+            // Apple body (red)
+            ctx.fillStyle = '#cc2222';
+            ctx.beginPath();
+            ctx.ellipse(16 * s, 18 * s, 10 * s, 11 * s, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Darker shade
+            ctx.fillStyle = '#aa1111';
+            ctx.beginPath();
+            ctx.ellipse(20 * s, 20 * s, 6 * s, 8 * s, 0.3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(12 * s, 14 * s, 4 * s, 5 * s, -0.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Stem
+            ctx.strokeStyle = '#5a3d2b';
+            ctx.lineWidth = 2 * s;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(16 * s, 7 * s);
+            ctx.quadraticCurveTo(18 * s, 4 * s, 20 * s, 5 * s);
+            ctx.stroke();
+
+            // Leaf
+            ctx.fillStyle = '#228822';
+            ctx.beginPath();
+            ctx.ellipse(22 * s, 6 * s, 4 * s, 2 * s, 0.5, 0, Math.PI * 2);
             ctx.fill();
         }
     };
@@ -2989,6 +3030,15 @@
                             if (dropItem) {
                                 this.player.addToInventory(dropItem);
                             }
+
+                            // Check for random bonus drops (like apples from leaves)
+                            if (block.randomDrop && Math.random() < block.randomDrop.chance) {
+                                const bonusItem = getItemById(block.randomDrop.itemId);
+                                if (bonusItem) {
+                                    this.player.addToInventory(bonusItem);
+                                    this.showNotification('Found an apple!');
+                                }
+                            }
                         }
                         // Block breaks either way, but no drops if wrong tool tier or dropsNothing
                         this.world.setBlock(target.x, target.y, BLOCKS.AIR);
@@ -3002,7 +3052,7 @@
                 document.getElementById('miningProgress').style.display = 'none';
             }
 
-            // Right click - place or interact
+            // Right click - place, interact, or eat
             if (this.mouse.right) {
                 this.mouse.right = false; // Single action per click
 
@@ -3012,6 +3062,22 @@
                 if (currentBlock.interactive) {
                     if (currentBlock.id === BLOCKS.FURNACE.id) {
                         this.openFurnace(target.x, target.y);
+                    }
+                    return;
+                }
+
+                // Check if holding food - eat it
+                const heldItem = this.player.getHeldItem();
+                if (heldItem && heldItem.food) {
+                    // Only eat if not at full health
+                    if (this.player.health < this.player.maxHealth) {
+                        this.player.heal(heldItem.healAmount);
+                        this.player.removeFromInventory(this.player.selectedSlot);
+                        this.updateUI();
+                        this.updateHealthBar();
+                        this.showNotification(`+${heldItem.healAmount} HP`);
+                    } else {
+                        this.showNotification('Already at full health!');
                     }
                     return;
                 }
