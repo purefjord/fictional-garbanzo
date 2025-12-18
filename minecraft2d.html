@@ -329,6 +329,263 @@
         #saveNotification.show {
             opacity: 1;
         }
+
+        /* Crafting UI */
+        #craftingOverlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 800;
+        }
+        #craftingOverlay.show {
+            display: flex;
+        }
+        #craftingPanel {
+            background: #8b8b8b;
+            border: 4px solid #373737;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        #craftingPanel h2 {
+            color: #fff;
+            text-shadow: 2px 2px #373737;
+            margin: 0 0 15px 0;
+            text-align: center;
+            font-size: 24px;
+        }
+        .craft-section {
+            margin-bottom: 20px;
+        }
+        .craft-section h3 {
+            color: #ddd;
+            font-size: 14px;
+            margin: 0 0 10px 0;
+            border-bottom: 2px solid #555;
+            padding-bottom: 5px;
+        }
+        .recipe-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+        }
+        .recipe-item {
+            background: #5a5a5a;
+            border: 2px solid #444;
+            border-radius: 4px;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .recipe-item:hover {
+            background: #6a6a6a;
+            border-color: #888;
+        }
+        .recipe-item.can-craft {
+            border-color: #5a5;
+            background: #4a5a4a;
+        }
+        .recipe-item.can-craft:hover {
+            background: #5a6a5a;
+            border-color: #7c7;
+        }
+        .recipe-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .recipe-icon {
+            width: 32px;
+            height: 32px;
+            background: #333;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .recipe-name {
+            color: #fff;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .recipe-count {
+            color: #aaa;
+            font-size: 12px;
+        }
+        .recipe-ingredients {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .ingredient {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: #444;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+        .ingredient-icon {
+            width: 16px;
+            height: 16px;
+        }
+        .ingredient-text {
+            color: #ccc;
+        }
+        .ingredient-text.has-enough {
+            color: #8f8;
+        }
+        .ingredient-text.not-enough {
+            color: #f88;
+        }
+        #craftingClose {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            color: #fff;
+            font-size: 28px;
+            cursor: pointer;
+            text-shadow: 2px 2px #000;
+        }
+        #craftingClose:hover {
+            color: #f88;
+        }
+        .crafting-hint {
+            color: #aaa;
+            font-size: 12px;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        /* Furnace UI */
+        #furnaceOverlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 800;
+        }
+        #furnaceOverlay.show {
+            display: flex;
+        }
+        #furnacePanel {
+            background: #8b8b8b;
+            border: 4px solid #373737;
+            border-radius: 8px;
+            padding: 20px;
+            position: relative;
+        }
+        #furnacePanel h2 {
+            color: #fff;
+            text-shadow: 2px 2px #373737;
+            margin: 0 0 15px 0;
+            text-align: center;
+            font-size: 24px;
+        }
+        #furnaceClose {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            color: #fff;
+            font-size: 28px;
+            cursor: pointer;
+            text-shadow: 2px 2px #000;
+        }
+        #furnaceClose:hover {
+            color: #f88;
+        }
+        .furnace-grid {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .furnace-row {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .furnace-slot {
+            width: 50px;
+            height: 50px;
+            background: #5a5a5a;
+            border: 2px solid #444;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+        }
+        .furnace-slot:hover {
+            border-color: #888;
+        }
+        .furnace-slot canvas {
+            width: 32px;
+            height: 32px;
+        }
+        .furnace-slot .slot-count {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+        }
+        .furnace-arrow {
+            font-size: 32px;
+            color: #666;
+        }
+        .furnace-arrow.active {
+            color: #fa0;
+        }
+        .furnace-fire {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #444;
+        }
+        .furnace-fire.burning {
+            color: #f80;
+            animation: flicker 0.5s infinite alternate;
+        }
+        @keyframes flicker {
+            from { opacity: 0.8; }
+            to { opacity: 1; }
+        }
+        .furnace-progress {
+            width: 50px;
+            height: 6px;
+            background: #444;
+            border-radius: 3px;
+            margin-top: 5px;
+        }
+        .furnace-progress-fill {
+            height: 100%;
+            background: #fa0;
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        .furnace-label {
+            color: #aaa;
+            font-size: 11px;
+            text-align: center;
+            margin-top: 2px;
+        }
     </style>
 </head>
 <body>
@@ -350,14 +607,56 @@
         WASD / Arrows - Move<br>
         Space - Jump<br>
         Left Click - Break block<br>
-        Right Click - Place block<br>
+        Right Click - Place/Use<br>
         1-9 - Select hotbar<br>
-        Scroll - Change slot<br>
+        E - Crafting menu<br>
         P - Save game<br>
         N - New game
     </div>
     <div id="miningProgress"><div class="fill"></div></div>
     <div id="saveNotification">Game Saved</div>
+
+    <!-- Crafting UI -->
+    <div id="craftingOverlay">
+        <div id="craftingPanel">
+            <span id="craftingClose">&times;</span>
+            <h2>Crafting</h2>
+            <div id="craftingRecipes"></div>
+            <div class="crafting-hint">Click a recipe to craft. Press E or Escape to close.</div>
+        </div>
+    </div>
+
+    <!-- Furnace UI -->
+    <div id="furnaceOverlay">
+        <div id="furnacePanel">
+            <span id="furnaceClose">&times;</span>
+            <h2>Furnace</h2>
+            <div class="furnace-grid">
+                <div class="furnace-row">
+                    <div>
+                        <div class="furnace-slot" id="furnaceInput"></div>
+                        <div class="furnace-label">Input</div>
+                    </div>
+                    <div class="furnace-arrow" id="furnaceArrow">&#10132;</div>
+                    <div>
+                        <div class="furnace-slot" id="furnaceOutput"></div>
+                        <div class="furnace-label">Output</div>
+                    </div>
+                </div>
+                <div class="furnace-row">
+                    <div>
+                        <div class="furnace-fire" id="furnaceFire">&#128293;</div>
+                        <div class="furnace-slot" id="furnaceFuel"></div>
+                        <div class="furnace-label">Fuel (Coal)</div>
+                    </div>
+                    <div class="furnace-progress">
+                        <div class="furnace-progress-fill" id="furnaceProgress"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="crafting-hint">Click slots to transfer items. Press Escape to close.</div>
+        </div>
+    </div>
 
     <!-- Mobile Touch Controls -->
     <div id="touchControls">
@@ -392,6 +691,7 @@
 
     // --- BLOCK TYPES ---
     // toolType: 'pickaxe' for stone/ore, 'axe' for wood, 'shovel' for dirt/sand
+    // dropsItem: item ID to drop instead of block (for ores)
     const BLOCKS = {
         AIR: { id: 0, name: 'Air', solid: false, transparent: true },
         GRASS: { id: 1, name: 'Grass', solid: true, hardness: 0.6, drops: 'DIRT', toolType: 'shovel' },
@@ -402,13 +702,14 @@
         LEAVES: { id: 6, name: 'Leaves', solid: true, hardness: 0.2, transparent: true },
         SAND: { id: 7, name: 'Sand', solid: true, hardness: 0.5, toolType: 'shovel' },
         WATER: { id: 8, name: 'Water', solid: false, transparent: true },
-        COAL_ORE: { id: 9, name: 'Coal Ore', solid: true, hardness: 3, toolType: 'pickaxe' },
-        IRON_ORE: { id: 10, name: 'Iron Ore', solid: true, hardness: 3, toolType: 'pickaxe', minTier: 1 },
+        COAL_ORE: { id: 9, name: 'Coal Ore', solid: true, hardness: 3, toolType: 'pickaxe', dropsItem: 201 }, // Drops Coal
+        IRON_ORE: { id: 10, name: 'Iron Ore', solid: true, hardness: 3, toolType: 'pickaxe', minTier: 1 }, // Drops itself for smelting
         GOLD_ORE: { id: 11, name: 'Gold Ore', solid: true, hardness: 3, toolType: 'pickaxe', minTier: 2 },
-        DIAMOND_ORE: { id: 12, name: 'Diamond Ore', solid: true, hardness: 3, toolType: 'pickaxe', minTier: 2 },
+        DIAMOND_ORE: { id: 12, name: 'Diamond Ore', solid: true, hardness: 3, toolType: 'pickaxe', minTier: 2, dropsItem: 203 }, // Drops Diamond
         BEDROCK: { id: 13, name: 'Bedrock', solid: true, hardness: Infinity },
         PLANKS: { id: 14, name: 'Planks', solid: true, hardness: 2, toolType: 'axe' },
-        GLASS: { id: 15, name: 'Glass', solid: true, hardness: 0.3, transparent: true },
+        GLASS: { id: 15, name: 'Glass', solid: true, hardness: 0.3, transparent: true, dropsNothing: true },
+        FURNACE: { id: 16, name: 'Furnace', solid: true, hardness: 3.5, toolType: 'pickaxe', interactive: true },
     };
 
     // Create ID to block mapping
@@ -452,10 +753,62 @@
         TOOL_BY_ID[tool.id] = tool;
     }
 
-    // Combined item lookup (blocks + tools)
-    function getItemById(id) {
-        return BLOCK_BY_ID[id] || TOOL_BY_ID[id];
+    // --- MATERIALS (non-block, non-tool items) ---
+    const ITEMS = {
+        STICK: { id: 200, name: 'Stick', isItem: true, stackable: true },
+        COAL: { id: 201, name: 'Coal', isItem: true, stackable: true },
+        IRON_INGOT: { id: 202, name: 'Iron Ingot', isItem: true, stackable: true },
+        DIAMOND: { id: 203, name: 'Diamond', isItem: true, stackable: true },
+    };
+
+    // Create ID to item mapping
+    const ITEM_BY_ID = {};
+    for (const [key, item] of Object.entries(ITEMS)) {
+        item.key = key;
+        ITEM_BY_ID[item.id] = item;
     }
+
+    // Combined item lookup (blocks + tools + items)
+    function getItemById(id) {
+        return BLOCK_BY_ID[id] || TOOL_BY_ID[id] || ITEM_BY_ID[id];
+    }
+
+    // --- CRAFTING RECIPES ---
+    const RECIPES = [
+        // Basic materials
+        { result: BLOCKS.PLANKS, resultCount: 4, ingredients: [{ item: BLOCKS.WOOD, count: 1 }], name: 'Planks' },
+        { result: ITEMS.STICK, resultCount: 4, ingredients: [{ item: BLOCKS.PLANKS, count: 2 }], name: 'Sticks' },
+
+        // Furnace
+        { result: BLOCKS.FURNACE, resultCount: 1, ingredients: [{ item: BLOCKS.COBBLESTONE, count: 8 }], name: 'Furnace' },
+
+        // Wood tools
+        { result: TOOLS.WOOD_PICKAXE, resultCount: 1, ingredients: [{ item: BLOCKS.PLANKS, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Wood Pickaxe' },
+        { result: TOOLS.WOOD_AXE, resultCount: 1, ingredients: [{ item: BLOCKS.PLANKS, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Wood Axe' },
+        { result: TOOLS.WOOD_SHOVEL, resultCount: 1, ingredients: [{ item: BLOCKS.PLANKS, count: 1 }, { item: ITEMS.STICK, count: 2 }], name: 'Wood Shovel' },
+
+        // Stone tools
+        { result: TOOLS.STONE_PICKAXE, resultCount: 1, ingredients: [{ item: BLOCKS.COBBLESTONE, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Stone Pickaxe' },
+        { result: TOOLS.STONE_AXE, resultCount: 1, ingredients: [{ item: BLOCKS.COBBLESTONE, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Stone Axe' },
+        { result: TOOLS.STONE_SHOVEL, resultCount: 1, ingredients: [{ item: BLOCKS.COBBLESTONE, count: 1 }, { item: ITEMS.STICK, count: 2 }], name: 'Stone Shovel' },
+
+        // Iron tools
+        { result: TOOLS.IRON_PICKAXE, resultCount: 1, ingredients: [{ item: ITEMS.IRON_INGOT, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Iron Pickaxe' },
+        { result: TOOLS.IRON_AXE, resultCount: 1, ingredients: [{ item: ITEMS.IRON_INGOT, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Iron Axe' },
+        { result: TOOLS.IRON_SHOVEL, resultCount: 1, ingredients: [{ item: ITEMS.IRON_INGOT, count: 1 }, { item: ITEMS.STICK, count: 2 }], name: 'Iron Shovel' },
+
+        // Diamond tools
+        { result: TOOLS.DIAMOND_PICKAXE, resultCount: 1, ingredients: [{ item: ITEMS.DIAMOND, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Diamond Pickaxe' },
+        { result: TOOLS.DIAMOND_AXE, resultCount: 1, ingredients: [{ item: ITEMS.DIAMOND, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Diamond Axe' },
+        { result: TOOLS.DIAMOND_SHOVEL, resultCount: 1, ingredients: [{ item: ITEMS.DIAMOND, count: 1 }, { item: ITEMS.STICK, count: 2 }], name: 'Diamond Shovel' },
+    ];
+
+    // --- SMELTING RECIPES ---
+    const SMELTING_RECIPES = [
+        { input: BLOCKS.IRON_ORE, output: ITEMS.IRON_INGOT, time: 10 }, // 10 seconds
+        { input: BLOCKS.COBBLESTONE, output: BLOCKS.STONE, time: 10 },
+        { input: BLOCKS.SAND, output: BLOCKS.GLASS, time: 10 },
+    ];
 
     // --- SIMPLEX NOISE IMPLEMENTATION ---
     class SimplexNoise {
@@ -604,6 +957,9 @@
                     break;
                 case 'GLASS':
                     this.drawGlass(ctx, size);
+                    break;
+                case 'FURNACE':
+                    this.drawFurnace(ctx, size);
                     break;
                 default:
                     ctx.fillStyle = '#ff00ff';
@@ -844,6 +1200,38 @@
             ctx.fill();
         },
 
+        drawFurnace(ctx, size) {
+            // Stone base
+            ctx.fillStyle = '#6a6a6a';
+            ctx.fillRect(0, 0, size, size);
+            this.addNoise(ctx, size, '#555', 0.2);
+
+            // Dark border
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(1, 1, size - 2, size - 2);
+
+            // Furnace opening (dark hole)
+            const holeX = size * 0.25;
+            const holeY = size * 0.4;
+            const holeW = size * 0.5;
+            const holeH = size * 0.45;
+
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(holeX, holeY, holeW, holeH);
+
+            // Inner glow hint
+            ctx.fillStyle = '#333';
+            ctx.fillRect(holeX + 2, holeY + 2, holeW - 4, holeH - 4);
+
+            // Top vent
+            ctx.fillStyle = '#555';
+            ctx.fillRect(size * 0.3, size * 0.1, size * 0.4, size * 0.15);
+            ctx.fillStyle = '#222';
+            ctx.fillRect(size * 0.35, size * 0.12, size * 0.1, size * 0.1);
+            ctx.fillRect(size * 0.55, size * 0.12, size * 0.1, size * 0.1);
+        },
+
         addNoise(ctx, size, color, intensity) {
             ctx.fillStyle = color;
             for (let i = 0; i < size * size * intensity; i++) {
@@ -964,6 +1352,157 @@
             ctx.closePath();
             ctx.fill();
             ctx.stroke();
+        },
+
+        // Item textures (materials)
+        createItemTexture(itemKey, size = 32) {
+            const cacheKey = `item_${itemKey}_${size}`;
+            if (this.cache[cacheKey]) return this.cache[cacheKey];
+
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            switch (itemKey) {
+                case 'STICK':
+                    this.drawStick(ctx, size);
+                    break;
+                case 'COAL':
+                    this.drawCoal(ctx, size);
+                    break;
+                case 'IRON_INGOT':
+                    this.drawIngot(ctx, size, '#C0C0C0', '#888');
+                    break;
+                case 'DIAMOND':
+                    this.drawDiamond(ctx, size);
+                    break;
+                default:
+                    ctx.fillStyle = '#ff00ff';
+                    ctx.fillRect(size * 0.25, size * 0.25, size * 0.5, size * 0.5);
+            }
+
+            this.cache[cacheKey] = canvas;
+            return canvas;
+        },
+
+        drawStick(ctx, size) {
+            const s = size / 32;
+            ctx.strokeStyle = '#6B4423';
+            ctx.lineWidth = 4 * s;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(10 * s, 26 * s);
+            ctx.lineTo(22 * s, 6 * s);
+            ctx.stroke();
+
+            // Highlight
+            ctx.strokeStyle = '#8B6443';
+            ctx.lineWidth = 2 * s;
+            ctx.beginPath();
+            ctx.moveTo(11 * s, 24 * s);
+            ctx.lineTo(21 * s, 8 * s);
+            ctx.stroke();
+        },
+
+        drawCoal(ctx, size) {
+            const s = size / 32;
+            ctx.fillStyle = '#1a1a1a';
+
+            // Irregular coal chunk
+            ctx.beginPath();
+            ctx.moveTo(8 * s, 16 * s);
+            ctx.lineTo(12 * s, 8 * s);
+            ctx.lineTo(20 * s, 6 * s);
+            ctx.lineTo(26 * s, 12 * s);
+            ctx.lineTo(24 * s, 22 * s);
+            ctx.lineTo(16 * s, 26 * s);
+            ctx.lineTo(10 * s, 24 * s);
+            ctx.closePath();
+            ctx.fill();
+
+            // Shiny spots
+            ctx.fillStyle = '#333';
+            ctx.fillRect(14 * s, 12 * s, 4 * s, 3 * s);
+            ctx.fillRect(18 * s, 16 * s, 3 * s, 4 * s);
+        },
+
+        drawIngot(ctx, size, color, shadow) {
+            const s = size / 32;
+
+            // 3D ingot shape
+            ctx.fillStyle = shadow;
+            ctx.beginPath();
+            ctx.moveTo(4 * s, 20 * s);
+            ctx.lineTo(8 * s, 26 * s);
+            ctx.lineTo(28 * s, 26 * s);
+            ctx.lineTo(28 * s, 16 * s);
+            ctx.lineTo(24 * s, 12 * s);
+            ctx.lineTo(4 * s, 12 * s);
+            ctx.closePath();
+            ctx.fill();
+
+            // Top face
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(4 * s, 12 * s);
+            ctx.lineTo(8 * s, 8 * s);
+            ctx.lineTo(28 * s, 8 * s);
+            ctx.lineTo(24 * s, 12 * s);
+            ctx.closePath();
+            ctx.fill();
+
+            // Front face
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(4 * s, 12 * s);
+            ctx.lineTo(4 * s, 20 * s);
+            ctx.lineTo(8 * s, 26 * s);
+            ctx.lineTo(8 * s, 8 * s);
+            ctx.closePath();
+            ctx.fill();
+
+            // Highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fillRect(6 * s, 9 * s, 18 * s, 2 * s);
+        },
+
+        drawDiamond(ctx, size) {
+            const s = size / 32;
+
+            // Diamond gem shape
+            ctx.fillStyle = '#00CED1';
+            ctx.beginPath();
+            ctx.moveTo(16 * s, 4 * s);   // Top
+            ctx.lineTo(26 * s, 12 * s);  // Top right
+            ctx.lineTo(22 * s, 28 * s);  // Bottom right
+            ctx.lineTo(10 * s, 28 * s);  // Bottom left
+            ctx.lineTo(6 * s, 12 * s);   // Top left
+            ctx.closePath();
+            ctx.fill();
+
+            // Facets
+            ctx.strokeStyle = '#00FFFF';
+            ctx.lineWidth = 1 * s;
+            ctx.beginPath();
+            ctx.moveTo(16 * s, 4 * s);
+            ctx.lineTo(16 * s, 28 * s);
+            ctx.moveTo(6 * s, 12 * s);
+            ctx.lineTo(26 * s, 12 * s);
+            ctx.moveTo(16 * s, 12 * s);
+            ctx.lineTo(10 * s, 28 * s);
+            ctx.moveTo(16 * s, 12 * s);
+            ctx.lineTo(22 * s, 28 * s);
+            ctx.stroke();
+
+            // Shine
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.beginPath();
+            ctx.moveTo(16 * s, 4 * s);
+            ctx.lineTo(10 * s, 12 * s);
+            ctx.lineTo(16 * s, 12 * s);
+            ctx.closePath();
+            ctx.fill();
         }
     };
 
@@ -1452,6 +1991,9 @@
                 // Restore time
                 this.gameTime = saveData.gameTime || 0;
 
+                // Restore furnaces (will be applied after furnaces Map is created)
+                this._savedFurnaces = saveData.furnaces;
+
                 this.showNotification('Game Loaded');
             } else {
                 // New game - find spawn point
@@ -1510,6 +2052,21 @@
             // Mining
             this.mining = { active: false, x: 0, y: 0, progress: 0, target: null };
 
+            // Crafting
+            this.craftingOpen = false;
+            this.setupCrafting();
+
+            // Furnace
+            this.furnaceOpen = false;
+            this.activeFurnace = null; // { x, y, input, fuel, output, progress, burnTime }
+            this.furnaces = new Map(); // Store furnace states by "x,y"
+            // Restore saved furnaces if any
+            if (this._savedFurnaces) {
+                this.furnaces = new Map(this._savedFurnaces);
+                delete this._savedFurnaces;
+            }
+            this.setupFurnace();
+
             // Touch controls
             this.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
             this.touchMode = 'mine'; // 'mine' or 'place'
@@ -1538,6 +2095,11 @@
             // Preload tool textures
             for (const key of Object.keys(TOOLS)) {
                 TextureGenerator.createToolTexture(key);
+            }
+
+            // Preload item textures
+            for (const key of Object.keys(ITEMS)) {
+                TextureGenerator.createItemTexture(key);
             }
 
             // UI
@@ -1596,6 +2158,19 @@
                         if (confirm('Start a new game? Your current progress will be lost.')) {
                             this.deleteSave();
                             location.reload();
+                        }
+                        break;
+                    case 'KeyE':
+                        // Toggle crafting menu
+                        this.toggleCrafting();
+                        break;
+                    case 'Escape':
+                        // Close menus
+                        if (this.craftingOpen) {
+                            this.closeCrafting();
+                        }
+                        if (this.furnaceOpen) {
+                            this.closeFurnace();
                         }
                         break;
                 }
@@ -1838,8 +2413,12 @@
 
                     let texture;
                     if (itemData.isItem) {
-                        // It's a tool
-                        texture = TextureGenerator.createToolTexture(itemData.key);
+                        // Check if it's a tool or material
+                        if (TOOL_BY_ID[item.itemId]) {
+                            texture = TextureGenerator.createToolTexture(itemData.key);
+                        } else {
+                            texture = TextureGenerator.createItemTexture(itemData.key);
+                        }
                     } else {
                         // It's a block
                         texture = TextureGenerator.createTexture(itemData.key);
@@ -1855,6 +2434,484 @@
                     countEl.textContent = '';
                 }
             });
+        }
+
+        // --- CRAFTING SYSTEM ---
+        setupCrafting() {
+            // Close button
+            document.getElementById('craftingClose').onclick = () => this.closeCrafting();
+
+            // Click outside to close
+            document.getElementById('craftingOverlay').onclick = (e) => {
+                if (e.target.id === 'craftingOverlay') {
+                    this.closeCrafting();
+                }
+            };
+        }
+
+        toggleCrafting() {
+            if (this.craftingOpen) {
+                this.closeCrafting();
+            } else {
+                this.openCrafting();
+            }
+        }
+
+        openCrafting() {
+            this.craftingOpen = true;
+            document.getElementById('craftingOverlay').classList.add('show');
+            this.renderCraftingRecipes();
+        }
+
+        closeCrafting() {
+            this.craftingOpen = false;
+            document.getElementById('craftingOverlay').classList.remove('show');
+        }
+
+        // Count how many of an item the player has
+        countItem(itemId) {
+            let count = 0;
+            for (const slot of this.player.inventory) {
+                if (slot && slot.itemId === itemId) {
+                    count += slot.count;
+                }
+            }
+            return count;
+        }
+
+        // Check if player can craft a recipe
+        canCraft(recipe) {
+            for (const ingredient of recipe.ingredients) {
+                if (this.countItem(ingredient.item.id) < ingredient.count) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Remove items from inventory for crafting
+        consumeIngredients(recipe) {
+            for (const ingredient of recipe.ingredients) {
+                let remaining = ingredient.count;
+                for (let i = 0; i < this.player.inventory.length && remaining > 0; i++) {
+                    const slot = this.player.inventory[i];
+                    if (slot && slot.itemId === ingredient.item.id) {
+                        const take = Math.min(slot.count, remaining);
+                        slot.count -= take;
+                        remaining -= take;
+                        if (slot.count <= 0) {
+                            this.player.inventory[i] = null;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Craft a recipe
+        craft(recipe) {
+            if (!this.canCraft(recipe)) return false;
+
+            // Check if we have room in inventory
+            const result = recipe.result;
+            const resultCount = recipe.resultCount;
+
+            // Try to add result to inventory
+            const testPlayer = { inventory: JSON.parse(JSON.stringify(this.player.inventory)) };
+
+            // Consume ingredients first (virtually)
+            for (const ingredient of recipe.ingredients) {
+                let remaining = ingredient.count;
+                for (let i = 0; i < testPlayer.inventory.length && remaining > 0; i++) {
+                    const slot = testPlayer.inventory[i];
+                    if (slot && slot.itemId === ingredient.item.id) {
+                        const take = Math.min(slot.count, remaining);
+                        slot.count -= take;
+                        remaining -= take;
+                        if (slot.count <= 0) {
+                            testPlayer.inventory[i] = null;
+                        }
+                    }
+                }
+            }
+
+            // Check if result fits
+            let canFit = false;
+            const maxStack = result.isItem ? 1 : 64;
+
+            // Try to stack with existing
+            if (!result.isItem) {
+                for (const slot of testPlayer.inventory) {
+                    if (slot && slot.itemId === result.id && slot.count + resultCount <= maxStack) {
+                        canFit = true;
+                        break;
+                    }
+                }
+            }
+
+            // Try to find empty slot
+            if (!canFit) {
+                for (const slot of testPlayer.inventory) {
+                    if (!slot) {
+                        canFit = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!canFit) {
+                this.showNotification('Inventory full!');
+                return false;
+            }
+
+            // Actually consume and craft
+            this.consumeIngredients(recipe);
+            this.player.addToInventory(result, resultCount);
+            this.updateUI();
+            this.renderCraftingRecipes();
+
+            return true;
+        }
+
+        // Get texture for any item (block, tool, or material)
+        getItemTexture(item, size = 32) {
+            if (!item) return null;
+            if (TOOL_BY_ID[item.id]) {
+                return TextureGenerator.createToolTexture(item.key, size);
+            } else if (ITEM_BY_ID[item.id]) {
+                return TextureGenerator.createItemTexture(item.key, size);
+            } else {
+                return TextureGenerator.createTexture(item.key, size);
+            }
+        }
+
+        renderCraftingRecipes() {
+            const container = document.getElementById('craftingRecipes');
+            container.innerHTML = '';
+
+            // Group recipes by category
+            const categories = {
+                'Materials': [],
+                'Wood Tools': [],
+                'Stone Tools': [],
+                'Iron Tools': [],
+                'Diamond Tools': [],
+                'Blocks': []
+            };
+
+            for (const recipe of RECIPES) {
+                const result = recipe.result;
+                if (result.id === ITEMS.STICK?.id || result.id === BLOCKS.PLANKS?.id) {
+                    categories['Materials'].push(recipe);
+                } else if (result.tier === 'wood') {
+                    categories['Wood Tools'].push(recipe);
+                } else if (result.tier === 'stone') {
+                    categories['Stone Tools'].push(recipe);
+                } else if (result.tier === 'iron') {
+                    categories['Iron Tools'].push(recipe);
+                } else if (result.tier === 'diamond') {
+                    categories['Diamond Tools'].push(recipe);
+                } else {
+                    categories['Blocks'].push(recipe);
+                }
+            }
+
+            for (const [category, recipes] of Object.entries(categories)) {
+                if (recipes.length === 0) continue;
+
+                const section = document.createElement('div');
+                section.className = 'craft-section';
+                section.innerHTML = `<h3>${category}</h3>`;
+
+                const grid = document.createElement('div');
+                grid.className = 'recipe-grid';
+
+                for (const recipe of recipes) {
+                    const canCraft = this.canCraft(recipe);
+                    const item = document.createElement('div');
+                    item.className = 'recipe-item' + (canCraft ? ' can-craft' : '');
+
+                    // Recipe header with icon and name
+                    const header = document.createElement('div');
+                    header.className = 'recipe-header';
+
+                    const iconDiv = document.createElement('div');
+                    iconDiv.className = 'recipe-icon';
+                    const texture = this.getItemTexture(recipe.result, 32);
+                    if (texture) {
+                        const img = document.createElement('canvas');
+                        img.width = 24;
+                        img.height = 24;
+                        img.getContext('2d').drawImage(texture, 0, 0, 24, 24);
+                        iconDiv.appendChild(img);
+                    }
+                    header.appendChild(iconDiv);
+
+                    const nameDiv = document.createElement('div');
+                    nameDiv.innerHTML = `<div class="recipe-name">${recipe.name}</div>` +
+                        (recipe.resultCount > 1 ? `<div class="recipe-count">x${recipe.resultCount}</div>` : '');
+                    header.appendChild(nameDiv);
+
+                    item.appendChild(header);
+
+                    // Ingredients
+                    const ingredientsDiv = document.createElement('div');
+                    ingredientsDiv.className = 'recipe-ingredients';
+
+                    for (const ing of recipe.ingredients) {
+                        const ingDiv = document.createElement('div');
+                        ingDiv.className = 'ingredient';
+
+                        const ingTexture = this.getItemTexture(ing.item, 16);
+                        if (ingTexture) {
+                            const ingImg = document.createElement('canvas');
+                            ingImg.className = 'ingredient-icon';
+                            ingImg.width = 16;
+                            ingImg.height = 16;
+                            ingImg.getContext('2d').drawImage(ingTexture, 0, 0, 16, 16);
+                            ingDiv.appendChild(ingImg);
+                        }
+
+                        const hasCount = this.countItem(ing.item.id);
+                        const hasEnough = hasCount >= ing.count;
+                        const textSpan = document.createElement('span');
+                        textSpan.className = 'ingredient-text ' + (hasEnough ? 'has-enough' : 'not-enough');
+                        textSpan.textContent = `${hasCount}/${ing.count}`;
+                        ingDiv.appendChild(textSpan);
+
+                        ingredientsDiv.appendChild(ingDiv);
+                    }
+
+                    item.appendChild(ingredientsDiv);
+
+                    // Click to craft
+                    item.onclick = () => {
+                        if (this.craft(recipe)) {
+                            // Success feedback could go here
+                        }
+                    };
+
+                    grid.appendChild(item);
+                }
+
+                section.appendChild(grid);
+                container.appendChild(section);
+            }
+        }
+
+        // --- FURNACE SYSTEM ---
+        setupFurnace() {
+            // Close button
+            document.getElementById('furnaceClose').onclick = () => this.closeFurnace();
+
+            // Click outside to close
+            document.getElementById('furnaceOverlay').onclick = (e) => {
+                if (e.target.id === 'furnaceOverlay') {
+                    this.closeFurnace();
+                }
+            };
+
+            // Slot click handlers
+            document.getElementById('furnaceInput').onclick = () => this.handleFurnaceSlotClick('input');
+            document.getElementById('furnaceFuel').onclick = () => this.handleFurnaceSlotClick('fuel');
+            document.getElementById('furnaceOutput').onclick = () => this.handleFurnaceSlotClick('output');
+        }
+
+        getFurnaceState(x, y) {
+            const key = `${x},${y}`;
+            if (!this.furnaces.has(key)) {
+                this.furnaces.set(key, {
+                    x, y,
+                    input: null,    // { itemId, count }
+                    fuel: null,     // { itemId, count }
+                    output: null,   // { itemId, count }
+                    progress: 0,    // 0-1 smelting progress
+                    burnTime: 0     // remaining burn time in seconds
+                });
+            }
+            return this.furnaces.get(key);
+        }
+
+        openFurnace(x, y) {
+            this.furnaceOpen = true;
+            this.activeFurnace = this.getFurnaceState(x, y);
+            document.getElementById('furnaceOverlay').classList.add('show');
+            this.updateFurnaceUI();
+        }
+
+        closeFurnace() {
+            this.furnaceOpen = false;
+            this.activeFurnace = null;
+            document.getElementById('furnaceOverlay').classList.remove('show');
+        }
+
+        handleFurnaceSlotClick(slotType) {
+            if (!this.activeFurnace) return;
+
+            const selectedItem = this.player.inventory[this.player.selectedSlot];
+
+            if (slotType === 'input') {
+                // Put smeltable item in input
+                if (selectedItem) {
+                    const item = getItemById(selectedItem.itemId);
+                    // Check if it's a valid smelting input
+                    const recipe = SMELTING_RECIPES.find(r => r.input.id === selectedItem.itemId);
+                    if (recipe) {
+                        if (!this.activeFurnace.input) {
+                            // Transfer item to furnace
+                            this.activeFurnace.input = { itemId: selectedItem.itemId, count: selectedItem.count };
+                            this.player.inventory[this.player.selectedSlot] = null;
+                        } else if (this.activeFurnace.input.itemId === selectedItem.itemId) {
+                            // Stack
+                            this.activeFurnace.input.count += selectedItem.count;
+                            this.player.inventory[this.player.selectedSlot] = null;
+                        }
+                    }
+                } else if (this.activeFurnace.input) {
+                    // Take item back
+                    const item = getItemById(this.activeFurnace.input.itemId);
+                    if (this.player.addToInventory(item, this.activeFurnace.input.count)) {
+                        this.activeFurnace.input = null;
+                    }
+                }
+            } else if (slotType === 'fuel') {
+                // Put coal in fuel slot
+                if (selectedItem && selectedItem.itemId === ITEMS.COAL.id) {
+                    if (!this.activeFurnace.fuel) {
+                        this.activeFurnace.fuel = { itemId: selectedItem.itemId, count: selectedItem.count };
+                        this.player.inventory[this.player.selectedSlot] = null;
+                    } else if (this.activeFurnace.fuel.itemId === selectedItem.itemId) {
+                        this.activeFurnace.fuel.count += selectedItem.count;
+                        this.player.inventory[this.player.selectedSlot] = null;
+                    }
+                } else if (!selectedItem && this.activeFurnace.fuel) {
+                    // Take fuel back
+                    const item = getItemById(this.activeFurnace.fuel.itemId);
+                    if (this.player.addToInventory(item, this.activeFurnace.fuel.count)) {
+                        this.activeFurnace.fuel = null;
+                    }
+                }
+            } else if (slotType === 'output') {
+                // Take output
+                if (this.activeFurnace.output) {
+                    const item = getItemById(this.activeFurnace.output.itemId);
+                    if (this.player.addToInventory(item, this.activeFurnace.output.count)) {
+                        this.activeFurnace.output = null;
+                    }
+                }
+            }
+
+            this.updateUI();
+            this.updateFurnaceUI();
+        }
+
+        updateFurnaceUI() {
+            if (!this.activeFurnace) return;
+
+            const renderSlot = (slotEl, slotData) => {
+                slotEl.innerHTML = '';
+                if (slotData) {
+                    const item = getItemById(slotData.itemId);
+                    const texture = this.getItemTexture(item, 32);
+                    if (texture) {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 32;
+                        canvas.height = 32;
+                        canvas.getContext('2d').drawImage(texture, 0, 0, 32, 32);
+                        slotEl.appendChild(canvas);
+                    }
+                    if (slotData.count > 1) {
+                        const countEl = document.createElement('span');
+                        countEl.className = 'slot-count';
+                        countEl.textContent = slotData.count;
+                        slotEl.appendChild(countEl);
+                    }
+                }
+            };
+
+            renderSlot(document.getElementById('furnaceInput'), this.activeFurnace.input);
+            renderSlot(document.getElementById('furnaceFuel'), this.activeFurnace.fuel);
+            renderSlot(document.getElementById('furnaceOutput'), this.activeFurnace.output);
+
+            // Update fire and progress
+            const fireEl = document.getElementById('furnaceFire');
+            const arrowEl = document.getElementById('furnaceArrow');
+            const progressEl = document.getElementById('furnaceProgress');
+
+            if (this.activeFurnace.burnTime > 0) {
+                fireEl.classList.add('burning');
+                arrowEl.classList.add('active');
+            } else {
+                fireEl.classList.remove('burning');
+                arrowEl.classList.remove('active');
+            }
+
+            progressEl.style.width = (this.activeFurnace.progress * 100) + '%';
+        }
+
+        updateFurnaces(dt) {
+            const dtSeconds = dt / 1000;
+
+            for (const furnace of this.furnaces.values()) {
+                // Check if furnace block still exists
+                const block = this.world.getBlock(furnace.x, furnace.y);
+                if (block.id !== BLOCKS.FURNACE.id) {
+                    // Furnace was destroyed - drop items?
+                    this.furnaces.delete(`${furnace.x},${furnace.y}`);
+                    continue;
+                }
+
+                // Try to smelt
+                if (furnace.input && furnace.input.count > 0) {
+                    const recipe = SMELTING_RECIPES.find(r => r.input.id === furnace.input.itemId);
+                    if (recipe) {
+                        // Check if we can output
+                        const canOutput = !furnace.output ||
+                            (furnace.output.itemId === recipe.output.id && furnace.output.count < 64);
+
+                        if (canOutput) {
+                            // Need fuel?
+                            if (furnace.burnTime <= 0 && furnace.fuel && furnace.fuel.count > 0) {
+                                // Consume fuel (1 coal = 8 items worth of burn time)
+                                furnace.fuel.count--;
+                                if (furnace.fuel.count <= 0) furnace.fuel = null;
+                                furnace.burnTime = 80; // 80 seconds per coal (8 items * 10 sec each)
+                            }
+
+                            // Smelting in progress
+                            if (furnace.burnTime > 0) {
+                                furnace.burnTime -= dtSeconds;
+                                furnace.progress += dtSeconds / recipe.time;
+
+                                if (furnace.progress >= 1) {
+                                    // Smelting complete
+                                    furnace.progress = 0;
+                                    furnace.input.count--;
+                                    if (furnace.input.count <= 0) furnace.input = null;
+
+                                    if (!furnace.output) {
+                                        furnace.output = { itemId: recipe.output.id, count: 1 };
+                                    } else {
+                                        furnace.output.count++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // No input, reset progress
+                    furnace.progress = 0;
+                }
+
+                // Continue burning even without input (burn time ticks down)
+                if (furnace.burnTime > 0 && !furnace.input) {
+                    furnace.burnTime -= dtSeconds;
+                }
+            }
+
+            // Update UI if furnace is open
+            if (this.furnaceOpen && this.activeFurnace) {
+                this.updateFurnaceUI();
+            }
         }
 
         getBlockAtMouse() {
@@ -1916,12 +2973,24 @@
 
                     if (this.mining.progress >= 1) {
                         // Check if tool can harvest this block (for ores with tier requirements)
-                        if (this.player.canHarvest(block)) {
-                            // Break block and get drops
-                            const dropBlock = block.drops ? BLOCKS[block.drops] : block;
-                            this.player.addToInventory(dropBlock);
+                        if (this.player.canHarvest(block) && !block.dropsNothing) {
+                            // Determine what to drop
+                            let dropItem;
+                            if (block.dropsItem) {
+                                // Drops a specific item (like coal from coal ore)
+                                dropItem = getItemById(block.dropsItem);
+                            } else if (block.drops) {
+                                // Drops a different block (like cobblestone from stone)
+                                dropItem = BLOCKS[block.drops];
+                            } else {
+                                // Drops itself
+                                dropItem = block;
+                            }
+                            if (dropItem) {
+                                this.player.addToInventory(dropItem);
+                            }
                         }
-                        // Block breaks either way, but no drops if wrong tool tier
+                        // Block breaks either way, but no drops if wrong tool tier or dropsNothing
                         this.world.setBlock(target.x, target.y, BLOCKS.AIR);
                         this.mining.active = false;
                         progressBar.style.display = 'none';
@@ -1933,11 +3002,21 @@
                 document.getElementById('miningProgress').style.display = 'none';
             }
 
-            // Right click - place
+            // Right click - place or interact
             if (this.mouse.right) {
-                this.mouse.right = false; // Single place per click
+                this.mouse.right = false; // Single action per click
 
                 const currentBlock = this.world.getBlock(target.x, target.y);
+
+                // Check for interactive blocks first (like furnace)
+                if (currentBlock.interactive) {
+                    if (currentBlock.id === BLOCKS.FURNACE.id) {
+                        this.openFurnace(target.x, target.y);
+                    }
+                    return;
+                }
+
+                // Place block if target is air
                 if (currentBlock.id === BLOCKS.AIR.id) {
                     const selectedBlock = this.player.getSelectedBlock();
                     if (selectedBlock) {
@@ -1993,6 +3072,9 @@
 
             // Handle block interactions
             this.handleBlockInteraction(dt);
+
+            // Update furnaces
+            this.updateFurnaces(dt);
 
             // Update time
             this.gameTime += dt / 1000;
@@ -2301,7 +3383,7 @@
         saveGame() {
             try {
                 const saveData = {
-                    version: 1,
+                    version: 2,
                     timestamp: Date.now(),
                     seed: this.world.seed,
                     player: {
@@ -2315,6 +3397,7 @@
                         // Convert Map to array of [key, value] pairs
                         modifiedBlocks: Array.from(this.world.modifiedBlocks.entries())
                     },
+                    furnaces: Array.from(this.furnaces.entries()),
                     gameTime: this.gameTime
                 };
 
