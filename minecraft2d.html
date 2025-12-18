@@ -692,6 +692,15 @@
         DAY_LENGTH: 600,       // seconds for full day cycle
     };
 
+    // --- DETERMINISTIC RNG HELPER ---
+    // Seeded hash for reproducible random values based on coordinates
+    function hash2i(seed, x, y) {
+        let h = (seed | 0) ^ Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263);
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        h ^= h >>> 16;
+        return (h >>> 0) / 4294967296;
+    }
+
     // --- BLOCK TYPES ---
     // toolType: 'pickaxe' for stone/ore, 'axe' for wood, 'shovel' for dirt/sand
     // dropsItem: item ID to drop instead of block (for ores)
@@ -719,6 +728,7 @@
     const BLOCK_BY_ID = {};
     for (const [key, block] of Object.entries(BLOCKS)) {
         block.key = key;
+        block.kind = 'block';
         BLOCK_BY_ID[block.id] = block;
     }
 
@@ -732,21 +742,21 @@
     };
 
     const TOOLS = {
-        // Pickaxes - for stone, ores
-        WOOD_PICKAXE: { id: 100, name: 'Wood Pickaxe', type: 'pickaxe', tier: 'wood', isItem: true, stackable: false },
-        STONE_PICKAXE: { id: 101, name: 'Stone Pickaxe', type: 'pickaxe', tier: 'stone', isItem: true, stackable: false },
-        IRON_PICKAXE: { id: 102, name: 'Iron Pickaxe', type: 'pickaxe', tier: 'iron', isItem: true, stackable: false },
-        DIAMOND_PICKAXE: { id: 103, name: 'Diamond Pickaxe', type: 'pickaxe', tier: 'diamond', isItem: true, stackable: false },
-        // Axes - for wood
-        WOOD_AXE: { id: 110, name: 'Wood Axe', type: 'axe', tier: 'wood', isItem: true, stackable: false },
-        STONE_AXE: { id: 111, name: 'Stone Axe', type: 'axe', tier: 'stone', isItem: true, stackable: false },
-        IRON_AXE: { id: 112, name: 'Iron Axe', type: 'axe', tier: 'iron', isItem: true, stackable: false },
-        DIAMOND_AXE: { id: 113, name: 'Diamond Axe', type: 'axe', tier: 'diamond', isItem: true, stackable: false },
-        // Shovels - for dirt, sand
-        WOOD_SHOVEL: { id: 120, name: 'Wood Shovel', type: 'shovel', tier: 'wood', isItem: true, stackable: false },
-        STONE_SHOVEL: { id: 121, name: 'Stone Shovel', type: 'shovel', tier: 'stone', isItem: true, stackable: false },
-        IRON_SHOVEL: { id: 122, name: 'Iron Shovel', type: 'shovel', tier: 'iron', isItem: true, stackable: false },
-        DIAMOND_SHOVEL: { id: 123, name: 'Diamond Shovel', type: 'shovel', tier: 'diamond', isItem: true, stackable: false },
+        // Pickaxes - for stone, ores (damage: 2-5 by tier)
+        WOOD_PICKAXE: { id: 100, name: 'Wood Pickaxe', kind: 'tool', type: 'pickaxe', tier: 'wood', damage: 2, isItem: true, stackable: false },
+        STONE_PICKAXE: { id: 101, name: 'Stone Pickaxe', kind: 'tool', type: 'pickaxe', tier: 'stone', damage: 3, isItem: true, stackable: false },
+        IRON_PICKAXE: { id: 102, name: 'Iron Pickaxe', kind: 'tool', type: 'pickaxe', tier: 'iron', damage: 4, isItem: true, stackable: false },
+        DIAMOND_PICKAXE: { id: 103, name: 'Diamond Pickaxe', kind: 'tool', type: 'pickaxe', tier: 'diamond', damage: 5, isItem: true, stackable: false },
+        // Axes - for wood (damage: 4-7 by tier, axes hit harder)
+        WOOD_AXE: { id: 110, name: 'Wood Axe', kind: 'tool', type: 'axe', tier: 'wood', damage: 4, isItem: true, stackable: false },
+        STONE_AXE: { id: 111, name: 'Stone Axe', kind: 'tool', type: 'axe', tier: 'stone', damage: 5, isItem: true, stackable: false },
+        IRON_AXE: { id: 112, name: 'Iron Axe', kind: 'tool', type: 'axe', tier: 'iron', damage: 6, isItem: true, stackable: false },
+        DIAMOND_AXE: { id: 113, name: 'Diamond Axe', kind: 'tool', type: 'axe', tier: 'diamond', damage: 7, isItem: true, stackable: false },
+        // Shovels - for dirt, sand (damage: 1-2 by tier, shovels are weak weapons)
+        WOOD_SHOVEL: { id: 120, name: 'Wood Shovel', kind: 'tool', type: 'shovel', tier: 'wood', damage: 1, isItem: true, stackable: false },
+        STONE_SHOVEL: { id: 121, name: 'Stone Shovel', kind: 'tool', type: 'shovel', tier: 'stone', damage: 2, isItem: true, stackable: false },
+        IRON_SHOVEL: { id: 122, name: 'Iron Shovel', kind: 'tool', type: 'shovel', tier: 'iron', damage: 2, isItem: true, stackable: false },
+        DIAMOND_SHOVEL: { id: 123, name: 'Diamond Shovel', kind: 'tool', type: 'shovel', tier: 'diamond', damage: 3, isItem: true, stackable: false },
     };
 
     // Create ID to tool mapping
@@ -758,11 +768,11 @@
 
     // --- MATERIALS (non-block, non-tool items) ---
     const ITEMS = {
-        STICK: { id: 200, name: 'Stick', isItem: true, stackable: true },
-        COAL: { id: 201, name: 'Coal', isItem: true, stackable: true },
-        IRON_INGOT: { id: 202, name: 'Iron Ingot', isItem: true, stackable: true },
-        DIAMOND: { id: 203, name: 'Diamond', isItem: true, stackable: true },
-        APPLE: { id: 204, name: 'Apple', isItem: true, stackable: true, food: true, healAmount: 4 },
+        STICK: { id: 200, name: 'Stick', kind: 'item', isItem: true, stackable: true },
+        COAL: { id: 201, name: 'Coal', kind: 'item', isItem: true, stackable: true },
+        IRON_INGOT: { id: 202, name: 'Iron Ingot', kind: 'item', isItem: true, stackable: true },
+        DIAMOND: { id: 203, name: 'Diamond', kind: 'item', isItem: true, stackable: true },
+        APPLE: { id: 204, name: 'Apple', kind: 'item', isItem: true, stackable: true, food: true, healAmount: 4 },
     };
 
     // Create ID to item mapping
@@ -1627,9 +1637,9 @@
             const surfaceNoise = this.noise.octaveNoise(x * 0.02, 0, 4, 0.5);
             const surfaceHeight = CONFIG.SURFACE_HEIGHT + Math.floor(surfaceNoise * 20);
 
-            // Bedrock layer
+            // Bedrock layer (deterministic based on seed + coords)
             if (y >= this.height - 3) {
-                if (y >= this.height - 1 || Math.random() < 0.5) {
+                if (y >= this.height - 1 || hash2i(this.seed, x, y) < 0.5) {
                     return BLOCKS.BEDROCK.id;
                 }
             }
@@ -1686,7 +1696,8 @@
 
         // Generate trees after initial terrain
         generateTree(baseX, baseY) {
-            const trunkHeight = 4 + Math.floor(Math.random() * 3);
+            // Tree height is deterministic based on position
+            const trunkHeight = 4 + Math.floor(hash2i(this.seed, baseX, baseY) * 3);
 
             // Trunk
             for (let y = 0; y < trunkHeight; y++) {
@@ -2112,10 +2123,7 @@
                 if (Math.abs(this.knockbackX) < 0.1) this.knockbackX = 0;
             }
 
-            // dt is already clamped by Game.update()
-            const dtSeconds = dt / 1000;
-
-            // Gravity (dt-based)
+            // Gravity (dt-based, dtSeconds defined above)
             this.vy += CONFIG.GRAVITY * dtSeconds;
             if (this.vy > CONFIG.TERMINAL_VELOCITY) this.vy = CONFIG.TERMINAL_VELOCITY;
 
@@ -2264,18 +2272,8 @@
                 if (mob.isDead) continue;
 
                 if (mob.containsPoint(worldX, worldY)) {
-                    // Calculate damage based on held item
-                    let damage = 1; // Fist damage
-
-                    if (heldItem) {
-                        if (heldItem.type === 'axe') {
-                            damage = 4;
-                        } else if (heldItem.type === 'pickaxe') {
-                            damage = 2;
-                        } else if (heldItem.type === 'shovel') {
-                            damage = 2;
-                        }
-                    }
+                    // Calculate damage: use tool's damage value or default to 1 (fist)
+                    const damage = heldItem?.damage ?? 1;
 
                     // Knockback direction (away from player)
                     const knockbackDir = mob.x > this.player.x ? 1 : -1;
@@ -2293,10 +2291,10 @@
             return null;
         }
 
-        render(ctx, canvas, cameraX, cameraY) {
+        render(ctx, screenWidth, screenHeight, cameraX, cameraY) {
             const blockSize = CONFIG.BLOCK_SIZE;
-            const screenCenterX = canvas.width / 2;
-            const screenCenterY = canvas.height / 2;
+            const screenCenterX = screenWidth / 2;
+            const screenCenterY = screenHeight / 2;
 
             for (const mob of this.mobs) {
                 if (mob.isDead) continue;
@@ -2628,7 +2626,7 @@
             const resultCount = recipe.resultCount;
 
             // Test if result fits (virtual inventory check)
-            const testInv = JSON.parse(JSON.stringify(this.player.inventory));
+            const testInv = structuredClone(this.player.inventory);
 
             // Virtually consume ingredients
             for (const ingredient of recipe.ingredients) {
@@ -2978,9 +2976,18 @@
         }
 
         resize() {
-            this.canvas.width = window.innerWidth;
-            this.canvas.height = window.innerHeight;
+            // Support high-DPI/retina displays
+            const dpr = window.devicePixelRatio || 1;
+            this.canvas.width = Math.floor(window.innerWidth * dpr);
+            this.canvas.height = Math.floor(window.innerHeight * dpr);
+            this.canvas.style.width = window.innerWidth + 'px';
+            this.canvas.style.height = window.innerHeight + 'px';
+            this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             this.ctx.imageSmoothingEnabled = false;
+            this.dpr = dpr;
+            // Store CSS pixel dimensions for rendering calculations
+            this.screenWidth = window.innerWidth;
+            this.screenHeight = window.innerHeight;
 
             // Create/update star canvas for night sky (avoids 100 arc calls per frame)
             this.createStarCanvas();
@@ -2992,8 +2999,8 @@
                 this.starCanvas = document.createElement('canvas');
                 this.starCtx = this.starCanvas.getContext('2d');
             }
-            this.starCanvas.width = this.canvas.width;
-            this.starCanvas.height = this.canvas.height;
+            this.starCanvas.width = this.screenWidth;
+            this.starCanvas.height = this.screenHeight;
             this.lastStarSeed = null; // Force redraw on next render
         }
 
@@ -3246,8 +3253,8 @@
 
             // Snap crosshair to block grid
             const target = this.getBlockAtMouse();
-            const screenCenterX = this.canvas.width / 2;
-            const screenCenterY = this.canvas.height / 2;
+            const screenCenterX = this.screenWidth / 2;
+            const screenCenterY = this.screenHeight / 2;
 
             const screenX = screenCenterX + (target.x - this.cameraX) * blockSize;
             const screenY = screenCenterY + (target.y - this.cameraY) * blockSize;
@@ -3325,8 +3332,8 @@
 
         getBlockAtMouse() {
             const blockSize = CONFIG.BLOCK_SIZE;
-            const screenCenterX = this.canvas.width / 2;
-            const screenCenterY = this.canvas.height / 2;
+            const screenCenterX = this.screenWidth / 2;
+            const screenCenterY = this.screenHeight / 2;
 
             const worldX = this.cameraX + (this.mouse.x - screenCenterX) / blockSize;
             const worldY = this.cameraY + (this.mouse.y - screenCenterY) / blockSize;
@@ -3591,15 +3598,15 @@
         render() {
             const ctx = this.ctx;
             const blockSize = CONFIG.BLOCK_SIZE;
-            const screenCenterX = this.canvas.width / 2;
-            const screenCenterY = this.canvas.height / 2;
+            const screenCenterX = this.screenWidth / 2;
+            const screenCenterY = this.screenHeight / 2;
 
             // Sky gradient based on time of day
             this.renderSky();
 
             // Calculate visible range
-            const viewWidth = Math.ceil(this.canvas.width / blockSize) + 2;
-            const viewHeight = Math.ceil(this.canvas.height / blockSize) + 2;
+            const viewWidth = Math.ceil(this.screenWidth / blockSize) + 2;
+            const viewHeight = Math.ceil(this.screenHeight / blockSize) + 2;
 
             const startX = Math.floor(this.cameraX - viewWidth / 2);
             const startY = Math.floor(this.cameraY - viewHeight / 2);
@@ -3623,7 +3630,7 @@
             this.renderPlayer();
 
             // Render mobs
-            this.mobSystem.render(this.ctx, this.canvas, this.cameraX, this.cameraY);
+            this.mobSystem.render(this.ctx, this.screenWidth, this.screenHeight, this.cameraX, this.cameraY);
 
             // Highlight hovered block
             const target = this.getBlockAtMouse();
@@ -3689,12 +3696,12 @@
                 skyBottom = '#1a1a3e';
             }
 
-            const gradient = ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+            const gradient = ctx.createLinearGradient(0, 0, 0, this.screenHeight);
             gradient.addColorStop(0, skyTop);
             gradient.addColorStop(1, skyBottom);
 
             ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            ctx.fillRect(0, 0, this.screenWidth, this.screenHeight);
 
             // Stars at night (use pre-rendered canvas)
             if (hour < 6 || hour >= 20) {
@@ -3704,8 +3711,8 @@
             }
 
             // Sun/Moon
-            const celestialX = this.canvas.width * (0.2 + this.dayProgress * 0.6);
-            const celestialY = this.canvas.height * 0.2 + Math.sin(this.dayProgress * Math.PI) * this.canvas.height * 0.15;
+            const celestialX = this.screenWidth * (0.2 + this.dayProgress * 0.6);
+            const celestialY = this.screenHeight * 0.2 + Math.sin(this.dayProgress * Math.PI) * this.screenHeight * 0.15;
 
             if (hour >= 6 && hour < 18) {
                 // Sun
@@ -3731,8 +3738,8 @@
         renderPlayer() {
             const ctx = this.ctx;
             const blockSize = CONFIG.BLOCK_SIZE;
-            const screenCenterX = this.canvas.width / 2;
-            const screenCenterY = this.canvas.height / 2;
+            const screenCenterX = this.screenWidth / 2;
+            const screenCenterY = this.screenHeight / 2;
 
             const px = screenCenterX + (this.player.x - this.cameraX) * blockSize;
             const py = screenCenterY + (this.player.y - this.cameraY) * blockSize;
@@ -3790,15 +3797,22 @@
 
             const itemSize = w * 0.8;
 
-            if (heldItem.isItem) {
-                // Draw tool
-                const texture = TextureGenerator.createToolTexture(heldItem.key, 32);
+            let texture = null;
+            if (heldItem.kind === 'tool') {
+                // Draw tool (pickaxe, axe, shovel)
+                texture = TextureGenerator.createToolTexture(heldItem.key, 32);
                 if (texture) {
                     ctx.drawImage(texture, 0, -itemSize * 0.3, itemSize, itemSize);
                 }
+            } else if (heldItem.kind === 'item') {
+                // Draw material item (stick, coal, apple, etc.)
+                texture = TextureGenerator.createItemTexture(heldItem.key, 32);
+                if (texture) {
+                    ctx.drawImage(texture, 0, -itemSize * 0.3, itemSize * 0.7, itemSize * 0.7);
+                }
             } else {
                 // Draw block preview
-                const texture = TextureGenerator.createTexture(heldItem.key);
+                texture = TextureGenerator.createTexture(heldItem.key);
                 if (texture) {
                     ctx.drawImage(texture, 0, -itemSize * 0.3, itemSize * 0.6, itemSize * 0.6);
                 }
