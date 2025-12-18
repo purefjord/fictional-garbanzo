@@ -1716,16 +1716,80 @@
     }
 
     // --- PLAYER ---
-    class Player {
-        constructor(x, y) {
+    // --- ENTITY BASE CLASS (shared physics/collision) ---
+    class Entity {
+        constructor(x, y, width, height) {
             this.x = x;
             this.y = y;
             this.vx = 0;
             this.vy = 0;
-            this.width = CONFIG.PLAYER_WIDTH;
-            this.height = CONFIG.PLAYER_HEIGHT;
+            this.width = width;
+            this.height = height;
             this.onGround = false;
             this.facingRight = true;
+        }
+
+        // Shared collision detection
+        checkCollision(world, x, y) {
+            const left = x - this.width / 2;
+            const right = x + this.width / 2;
+            const top = y - this.height;
+            const bottom = y;
+
+            // Sample multiple points for accurate collision
+            const points = [
+                [left, top], [right, top],
+                [left, bottom - 0.01], [right, bottom - 0.01],
+                [left, (top + bottom) / 2], [right, (top + bottom) / 2]
+            ];
+
+            for (const [px, py] of points) {
+                const block = world.getBlock(Math.floor(px), Math.floor(py));
+                if (block.solid) return true;
+            }
+            return false;
+        }
+
+        // Shared movement with collision
+        moveWithCollision(world, dx, dy, steps = 10) {
+            const stepX = dx / steps;
+            const stepY = dy / steps;
+
+            for (let i = 0; i < steps; i++) {
+                const newX = this.x + stepX;
+                const newY = this.y + stepY;
+
+                if (!this.checkCollision(world, newX, this.y)) {
+                    this.x = newX;
+                }
+
+                if (!this.checkCollision(world, this.x, newY)) {
+                    this.y = newY;
+                } else {
+                    if (dy > 0) {
+                        this.onGround = true;
+                    }
+                    this.vy = 0;
+                }
+            }
+
+            // Check if still on ground
+            if (!this.checkCollision(world, this.x, this.y + 0.1)) {
+                this.onGround = false;
+            }
+        }
+
+        // Distance to another entity or point
+        distanceTo(other) {
+            const dx = (other.x !== undefined ? other.x : other) - this.x;
+            const dy = (other.y !== undefined ? other.y : 0) - this.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+    }
+
+    class Player extends Entity {
+        constructor(x, y) {
+            super(x, y, CONFIG.PLAYER_WIDTH, CONFIG.PLAYER_HEIGHT);
 
             // Health system
             this.maxHealth = 20;
@@ -1946,68 +2010,13 @@
 
             return fallDamage;
         }
-
-        moveWithCollision(world, dx, dy) {
-            const steps = 10;
-            const stepX = dx / steps;
-            const stepY = dy / steps;
-
-            for (let i = 0; i < steps; i++) {
-                const newX = this.x + stepX;
-                const newY = this.y + stepY;
-
-                if (!this.checkCollision(world, newX, this.y)) {
-                    this.x = newX;
-                }
-
-                if (!this.checkCollision(world, this.x, newY)) {
-                    this.y = newY;
-                } else {
-                    if (dy > 0) {
-                        this.onGround = true;
-                    }
-                    this.vy = 0;
-                }
-            }
-
-            // Check if still on ground
-            if (!this.checkCollision(world, this.x, this.y + 0.1)) {
-                this.onGround = false;
-            }
-        }
-
-        checkCollision(world, x, y) {
-            // Check all corners and edges of player hitbox
-            const left = x - this.width / 2;
-            const right = x + this.width / 2;
-            const top = y - this.height;
-            const bottom = y;
-
-            // Sample multiple points
-            const points = [
-                [left, top], [right, top],
-                [left, bottom - 0.01], [right, bottom - 0.01],
-                [left, (top + bottom) / 2], [right, (top + bottom) / 2]
-            ];
-
-            for (const [px, py] of points) {
-                const block = world.getBlock(Math.floor(px), Math.floor(py));
-                if (block.solid) return true;
-            }
-
-            return false;
-        }
+        // moveWithCollision and checkCollision inherited from Entity
     }
 
     // --- MOB SYSTEM ---
-    class Mob {
+    class Mob extends Entity {
         constructor(x, y, type = 'zombie') {
-            this.x = x;
-            this.y = y;
-            this.vx = 0;
-            this.vy = 0;
-            this.width = 0.6;
-            this.height = 1.8;
+            super(x, y, 0.6, 1.8);
             this.type = type;
 
             // Stats based on type
@@ -2020,8 +2029,7 @@
 
             this.health = this.maxHealth;
             this.isDead = false;
-            this.onGround = false;
-            this.facingRight = true;
+            // onGround and facingRight inherited from Entity
 
             // AI state
             this.aiState = 'idle'; // 'idle', 'chase'
@@ -2047,7 +2055,7 @@
             // AI: Check distance to player
             const distX = player.x - this.x;
             const distY = player.y - this.y;
-            const distance = Math.sqrt(distX * distX + distY * distY);
+            const distance = this.distanceTo(player);
 
             // Aggro range
             if (distance < 15) {
@@ -2110,9 +2118,7 @@
 
             // Check contact with player for damage
             if (this.attackCooldown <= 0 && this.targetPlayer && !this.targetPlayer.isDead) {
-                const px = this.targetPlayer.x;
-                const py = this.targetPlayer.y;
-                const contactDist = Math.sqrt((px - this.x) ** 2 + (py - this.y) ** 2);
+                const contactDist = this.distanceTo(this.targetPlayer);
 
                 if (contactDist < 1.0) {
                     // Hit player
@@ -2124,49 +2130,7 @@
 
             return null;
         }
-
-        moveWithCollision(world, dx, dy) {
-            const steps = 5;
-            const stepX = dx / steps;
-            const stepY = dy / steps;
-
-            for (let i = 0; i < steps; i++) {
-                const newX = this.x + stepX;
-                const newY = this.y + stepY;
-
-                if (!this.checkCollision(world, newX, this.y)) {
-                    this.x = newX;
-                }
-
-                if (!this.checkCollision(world, this.x, newY)) {
-                    this.y = newY;
-                    if (stepY > 0) this.onGround = false;
-                } else {
-                    if (stepY > 0) {
-                        this.onGround = true;
-                        this.vy = 0;
-                    } else if (stepY < 0) {
-                        this.vy = 0;
-                    }
-                }
-            }
-        }
-
-        checkCollision(world, x, y) {
-            const halfW = this.width / 2;
-            const corners = [
-                { x: x - halfW, y: y },
-                { x: x + halfW, y: y },
-                { x: x - halfW, y: y - this.height },
-                { x: x + halfW, y: y - this.height }
-            ];
-
-            for (const corner of corners) {
-                const block = world.getBlock(Math.floor(corner.x), Math.floor(corner.y));
-                if (block.solid) return true;
-            }
-            return false;
-        }
+        // moveWithCollision and checkCollision inherited from Entity
 
         takeDamage(amount, knockbackDir = 0) {
             if (this.invincibleTime > 0 || this.isDead) return false;
@@ -2352,6 +2316,29 @@
             this.setupUI();
             this.updateHealthBar();
 
+            // Cache DOM elements for performance (avoid repeated lookups)
+            this.dom = {
+                fps: document.getElementById('fps'),
+                position: document.getElementById('position'),
+                timeDisplay: document.getElementById('timeDisplay'),
+                deathScreen: document.getElementById('deathScreen'),
+                miningProgress: document.getElementById('miningProgress'),
+                miningFill: document.querySelector('#miningProgress .fill'),
+                damageOverlay: document.getElementById('damageOverlay'),
+                healthBar: document.getElementById('healthBar'),
+                saveNotification: document.getElementById('saveNotification'),
+                craftingOverlay: document.getElementById('craftingOverlay'),
+                craftingRecipes: document.getElementById('craftingRecipes'),
+                furnaceOverlay: document.getElementById('furnaceOverlay'),
+                furnaceInput: document.getElementById('furnaceInput'),
+                furnaceFuel: document.getElementById('furnaceFuel'),
+                furnaceOutput: document.getElementById('furnaceOutput'),
+                furnaceFire: document.getElementById('furnaceFire'),
+                furnaceArrow: document.getElementById('furnaceArrow'),
+                furnaceProgress: document.getElementById('furnaceProgress'),
+                touchCrosshair: document.getElementById('touchCrosshair'),
+            };
+
             // Respawn button handler
             document.getElementById('respawnBtn').onclick = () => this.respawnPlayer();
 
@@ -2370,6 +2357,39 @@
             this.canvas.width = window.innerWidth;
             this.canvas.height = window.innerHeight;
             this.ctx.imageSmoothingEnabled = false;
+
+            // Create/update star canvas for night sky (avoids 100 arc calls per frame)
+            this.createStarCanvas();
+        }
+
+        createStarCanvas() {
+            // Create offscreen canvas for stars
+            if (!this.starCanvas) {
+                this.starCanvas = document.createElement('canvas');
+                this.starCtx = this.starCanvas.getContext('2d');
+            }
+            this.starCanvas.width = this.canvas.width;
+            this.starCanvas.height = this.canvas.height;
+            this.lastStarSeed = null; // Force redraw on next render
+        }
+
+        renderStarsToCanvas(starSeed) {
+            // Only redraw if seed changed (camera moved significantly)
+            if (this.lastStarSeed === starSeed) return;
+            this.lastStarSeed = starSeed;
+
+            const ctx = this.starCtx;
+            ctx.clearRect(0, 0, this.starCanvas.width, this.starCanvas.height);
+            ctx.fillStyle = 'white';
+
+            for (let i = 0; i < 100; i++) {
+                const sx = ((i * 7919 + starSeed * 104729) % 1000) / 1000 * this.starCanvas.width;
+                const sy = ((i * 7901 + starSeed * 104723) % 1000) / 1000 * this.starCanvas.height * 0.6;
+                const size = ((i * 7907) % 3) + 1;
+                ctx.beginPath();
+                ctx.arc(sx, sy, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
 
         setupInput() {
@@ -2600,7 +2620,7 @@
         }
 
         updateTouchCrosshair() {
-            const crosshair = document.getElementById('touchCrosshair');
+            const crosshair = this.dom.touchCrosshair;
             const blockSize = CONFIG.BLOCK_SIZE;
 
             // Snap crosshair to block grid
@@ -2657,19 +2677,7 @@
                     preview.style.width = '32px';
                     preview.style.height = '32px';
 
-                    let texture;
-                    if (itemData.isItem) {
-                        // Check if it's a tool or material
-                        if (TOOL_BY_ID[item.itemId]) {
-                            texture = TextureGenerator.createToolTexture(itemData.key);
-                        } else {
-                            texture = TextureGenerator.createItemTexture(itemData.key);
-                        }
-                    } else {
-                        // It's a block
-                        texture = TextureGenerator.createTexture(itemData.key);
-                    }
-
+                    const texture = this.getItemTexture(itemData, 32);
                     if (texture) {
                         preview.getContext('2d').drawImage(texture, 0, 0, 32, 32);
                     }
@@ -2705,13 +2713,13 @@
 
         openCrafting() {
             this.craftingOpen = true;
-            document.getElementById('craftingOverlay').classList.add('show');
+            this.dom.craftingOverlay.classList.add('show');
             this.renderCraftingRecipes();
         }
 
         closeCrafting() {
             this.craftingOpen = false;
-            document.getElementById('craftingOverlay').classList.remove('show');
+            this.dom.craftingOverlay.classList.remove('show');
         }
 
         // Count how many of an item the player has
@@ -2832,7 +2840,7 @@
         }
 
         renderCraftingRecipes() {
-            const container = document.getElementById('craftingRecipes');
+            const container = this.dom.craftingRecipes;
             container.innerHTML = '';
 
             // Group recipes by category
@@ -2981,14 +2989,14 @@
         openFurnace(x, y) {
             this.furnaceOpen = true;
             this.activeFurnace = this.getFurnaceState(x, y);
-            document.getElementById('furnaceOverlay').classList.add('show');
+            this.dom.furnaceOverlay.classList.add('show');
             this.updateFurnaceUI();
         }
 
         closeFurnace() {
             this.furnaceOpen = false;
             this.activeFurnace = null;
-            document.getElementById('furnaceOverlay').classList.remove('show');
+            this.dom.furnaceOverlay.classList.remove('show');
         }
 
         handleFurnaceSlotClick(slotType) {
@@ -3075,14 +3083,14 @@
                 }
             };
 
-            renderSlot(document.getElementById('furnaceInput'), this.activeFurnace.input);
-            renderSlot(document.getElementById('furnaceFuel'), this.activeFurnace.fuel);
-            renderSlot(document.getElementById('furnaceOutput'), this.activeFurnace.output);
+            renderSlot(this.dom.furnaceInput, this.activeFurnace.input);
+            renderSlot(this.dom.furnaceFuel, this.activeFurnace.fuel);
+            renderSlot(this.dom.furnaceOutput, this.activeFurnace.output);
 
             // Update fire and progress
-            const fireEl = document.getElementById('furnaceFire');
-            const arrowEl = document.getElementById('furnaceArrow');
-            const progressEl = document.getElementById('furnaceProgress');
+            const fireEl = this.dom.furnaceFire;
+            const arrowEl = this.dom.furnaceArrow;
+            const progressEl = this.dom.furnaceProgress;
 
             if (this.activeFurnace.burnTime > 0) {
                 fireEl.classList.add('burning');
@@ -3196,7 +3204,7 @@
                     this.player.startSwing();
                     // Don't mine while attacking
                     this.mining.active = false;
-                    document.getElementById('miningProgress').style.display = 'none';
+                    this.dom.miningProgress.style.display = 'none';
                     return;
                 }
 
@@ -3221,8 +3229,8 @@
                     this.mining.progress += (dt / (block.hardness * 1000)) * miningSpeed;
 
                     // Update mining progress bar
-                    const progressBar = document.getElementById('miningProgress');
-                    const fill = progressBar.querySelector('.fill');
+                    const progressBar = this.dom.miningProgress;
+                    const fill = this.dom.miningFill;
                     progressBar.style.display = 'block';
                     progressBar.style.left = this.mouse.x - 20 + 'px';
                     progressBar.style.top = this.mouse.y + 20 + 'px';
@@ -3265,7 +3273,7 @@
                 }
             } else {
                 this.mining.active = false;
-                document.getElementById('miningProgress').style.display = 'none';
+                this.dom.miningProgress.style.display = 'none';
             }
 
             // Right click - place, interact, or eat
@@ -3323,7 +3331,7 @@
         update(dt) {
             // Check for death
             if (this.player.isDead) {
-                document.getElementById('deathScreen').classList.add('show');
+                this.dom.deathScreen.classList.add('show');
                 return;
             }
 
@@ -3343,7 +3351,7 @@
 
             // Check for death after damage
             if (this.player.isDead) {
-                document.getElementById('deathScreen').classList.add('show');
+                this.dom.deathScreen.classList.add('show');
                 return;
             }
 
@@ -3474,13 +3482,13 @@
         }
 
         showDamageEffect() {
-            const overlay = document.getElementById('damageOverlay');
+            const overlay = this.dom.damageOverlay;
             overlay.classList.add('flash');
             setTimeout(() => overlay.classList.remove('flash'), 150);
         }
 
         updateHealthBar() {
-            const healthBar = document.getElementById('healthBar');
+            const healthBar = this.dom.healthBar;
             const hearts = Math.ceil(this.player.maxHealth / 2); // 10 hearts for 20 HP
 
             // Build hearts HTML if needed
@@ -3526,7 +3534,7 @@
             this.cameraX = this.player.x;
             this.cameraY = this.player.y;
 
-            document.getElementById('deathScreen').classList.remove('show');
+            this.dom.deathScreen.classList.remove('show');
             this.updateHealthBar();
         }
 
@@ -3558,10 +3566,6 @@
 
                     const texture = TextureGenerator.createTexture(block.key);
                     ctx.drawImage(texture, screenX, screenY, blockSize, blockSize);
-
-                    // Subtle block borders
-                    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-                    ctx.strokeRect(screenX, screenY, blockSize, blockSize);
                 }
             }
 
@@ -3595,12 +3599,12 @@
             }
 
             // Update info display
-            document.getElementById('position').textContent =
+            this.dom.position.textContent =
                 `${Math.floor(this.player.x)}, ${Math.floor(this.player.y)}`;
 
             const hour = Math.floor(this.dayProgress * 24);
             const isDay = hour >= 6 && hour < 18;
-            document.getElementById('timeDisplay').textContent =
+            this.dom.timeDisplay.textContent =
                 `${hour.toString().padStart(2, '0')}:00 (${isDay ? 'Day' : 'Night'})`;
 
             // Update touch crosshair position (follows camera)
@@ -3642,18 +3646,11 @@
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-            // Stars at night
+            // Stars at night (use pre-rendered canvas)
             if (hour < 6 || hour >= 20) {
-                ctx.fillStyle = 'white';
                 const starSeed = Math.floor(this.cameraX / 100);
-                for (let i = 0; i < 100; i++) {
-                    const sx = ((i * 7919 + starSeed * 104729) % 1000) / 1000 * this.canvas.width;
-                    const sy = ((i * 7901 + starSeed * 104723) % 1000) / 1000 * this.canvas.height * 0.6;
-                    const size = ((i * 7907) % 3) + 1;
-                    ctx.beginPath();
-                    ctx.arc(sx, sy, size, 0, Math.PI * 2);
-                    ctx.fill();
-                }
+                this.renderStarsToCanvas(starSeed);
+                ctx.drawImage(this.starCanvas, 0, 0);
             }
 
             // Sun/Moon
@@ -3883,7 +3880,7 @@
         }
 
         showNotification(message) {
-            const notif = document.getElementById('saveNotification');
+            const notif = this.dom.saveNotification;
             notif.textContent = message;
             notif.classList.add('show');
             setTimeout(() => notif.classList.remove('show'), 1500);
@@ -3900,7 +3897,7 @@
                 this.fps = this.frameCount;
                 this.frameCount = 0;
                 this.lastFpsUpdate = now;
-                document.getElementById('fps').textContent = this.fps;
+                this.dom.fps.textContent = this.fps;
             }
 
             this.update(dt);
