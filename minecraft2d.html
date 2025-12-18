@@ -814,6 +814,9 @@
         { input: BLOCKS.SAND, output: BLOCKS.GLASS, time: 10 },
     ];
 
+    // Smelting lookup map (avoids linear search)
+    const SMELT_BY_INPUT = new Map(SMELTING_RECIPES.map(r => [r.input.id, r]));
+
     // --- SIMPLEX NOISE IMPLEMENTATION ---
     class SimplexNoise {
         constructor(seed = Math.random() * 10000) {
@@ -1907,30 +1910,37 @@
         }
 
         addToInventory(item, count = 1) {
+            // Returns number of items that couldn't be added (0 = complete success)
             // Items stack if they have stackable: true (or undefined for blocks which default to stackable)
             // Tools explicitly have stackable: false
             const canStack = item.stackable !== false;
             const maxStack = canStack ? 64 : 1;
+            let remaining = count;
 
-            // Try to stack with existing (only for stackable items)
+            // Try to stack with existing slots first (only for stackable items)
             if (canStack) {
-                for (let i = 0; i < this.inventory.length; i++) {
+                for (let i = 0; i < this.inventory.length && remaining > 0; i++) {
                     if (this.inventory[i] && this.inventory[i].itemId === item.id) {
-                        this.inventory[i].count = Math.min(maxStack, this.inventory[i].count + count);
-                        return true;
+                        const space = maxStack - this.inventory[i].count;
+                        if (space > 0) {
+                            const toAdd = Math.min(space, remaining);
+                            this.inventory[i].count += toAdd;
+                            remaining -= toAdd;
+                        }
                     }
                 }
             }
 
-            // Find empty slot
-            for (let i = 0; i < this.inventory.length; i++) {
+            // Fill empty slots with remainder
+            for (let i = 0; i < this.inventory.length && remaining > 0; i++) {
                 if (!this.inventory[i]) {
-                    this.inventory[i] = { itemId: item.id, count: count };
-                    return true;
+                    const toAdd = Math.min(maxStack, remaining);
+                    this.inventory[i] = { itemId: item.id, count: toAdd };
+                    remaining -= toAdd;
                 }
             }
 
-            return false; // Inventory full
+            return remaining; // 0 = success, >0 = overflow (items lost/dropped)
         }
 
         removeFromInventory(slot, count = 1) {
@@ -1953,9 +1963,8 @@
         update(world, keys, dt) {
             if (this.isDead) return 0;
 
-            // Clamp dt to prevent huge physics jumps after tab switch
-            const clampedDt = Math.min(dt, CONFIG.MAX_DT);
-            const dtSeconds = clampedDt / 1000;
+            // dt is already clamped by Game.update()
+            const dtSeconds = dt / 1000;
 
             // Horizontal movement (instant velocity, not acceleration-based)
             if (keys.left) {
@@ -2103,17 +2112,16 @@
                 if (Math.abs(this.knockbackX) < 0.1) this.knockbackX = 0;
             }
 
-            // Clamp dt for physics (same as player)
-            const clampedDt = Math.min(dt, CONFIG.MAX_DT);
-            const physDtSeconds = clampedDt / 1000;
+            // dt is already clamped by Game.update()
+            const dtSeconds = dt / 1000;
 
             // Gravity (dt-based)
-            this.vy += CONFIG.GRAVITY * physDtSeconds;
+            this.vy += CONFIG.GRAVITY * dtSeconds;
             if (this.vy > CONFIG.TERMINAL_VELOCITY) this.vy = CONFIG.TERMINAL_VELOCITY;
 
             // Move with collision (dt-based)
-            const dx = this.vx * physDtSeconds;
-            const dy = this.vy * physDtSeconds;
+            const dx = this.vx * dtSeconds;
+            const dy = this.vy * dtSeconds;
             this.moveWithCollision(world, dx, dy);
 
             // Check contact with player for damage
@@ -2151,6 +2159,209 @@
             const halfW = this.width / 2;
             return worldX >= this.x - halfW && worldX <= this.x + halfW &&
                    worldY <= this.y && worldY >= this.y - this.height;
+        }
+    }
+
+    // --- FURNACE SYSTEM ---
+    class FurnaceSystem {
+        constructor(dom, getItemTexture) {
+            this.dom = dom;
+            this.getItemTexture = getItemTexture;
+            this.furnaces = new Map(); // Store furnace states by "x,y"
+            this.isOpen = false;
+            this.active = null; // Currently open furnace
+            this.player = null; // Set by Game after player is created
+            this.onUIUpdate = null; // Callback for when UI needs updating
+
+            // Setup event handlers
+            document.getElementById('furnaceClose').onclick = () => this.close();
+            document.getElementById('furnaceOverlay').onclick = (e) => {
+                if (e.target.id === 'furnaceOverlay') this.close();
+            };
+            document.getElementById('furnaceInput').onclick = () => this.handleSlotClick('input');
+            document.getElementById('furnaceFuel').onclick = () => this.handleSlotClick('fuel');
+            document.getElementById('furnaceOutput').onclick = () => this.handleSlotClick('output');
+        }
+
+        setPlayer(player) { this.player = player; }
+        setUIUpdateCallback(callback) { this.onUIUpdate = callback; }
+
+        // For save/load
+        getState() { return Array.from(this.furnaces.entries()); }
+        loadState(entries) { if (entries) this.furnaces = new Map(entries); }
+
+        getOrCreate(x, y) {
+            const key = `${x},${y}`;
+            if (!this.furnaces.has(key)) {
+                this.furnaces.set(key, {
+                    x, y,
+                    input: null, fuel: null, output: null,
+                    progress: 0, burnTime: 0
+                });
+            }
+            return this.furnaces.get(key);
+        }
+
+        open(x, y) {
+            this.isOpen = true;
+            this.active = this.getOrCreate(x, y);
+            this.dom.furnaceOverlay.classList.add('show');
+            this.updateUI();
+        }
+
+        close() {
+            this.isOpen = false;
+            this.active = null;
+            this.dom.furnaceOverlay.classList.remove('show');
+        }
+
+        handleSlotClick(slotType) {
+            if (!this.active || !this.player) return;
+            const selectedSlot = this.player.inventory[this.player.selectedSlot];
+            const selectedItem = selectedSlot ? getItemById(selectedSlot.itemId) : null;
+
+            if (slotType === 'input') {
+                if (selectedItem) {
+                    const recipe = SMELT_BY_INPUT.get(selectedSlot.itemId);
+                    if (recipe) {
+                        if (!this.active.input) {
+                            this.active.input = { itemId: selectedSlot.itemId, count: selectedSlot.count };
+                            this.player.inventory[this.player.selectedSlot] = null;
+                        } else if (this.active.input.itemId === selectedSlot.itemId) {
+                            this.active.input.count += selectedSlot.count;
+                            this.player.inventory[this.player.selectedSlot] = null;
+                        }
+                    }
+                } else if (this.active.input) {
+                    const item = getItemById(this.active.input.itemId);
+                    if (this.player.addToInventory(item, this.active.input.count) === 0) {
+                        this.active.input = null;
+                    }
+                }
+            } else if (slotType === 'fuel') {
+                if (selectedItem && selectedSlot.itemId === ITEMS.COAL.id) {
+                    if (!this.active.fuel) {
+                        this.active.fuel = { itemId: selectedSlot.itemId, count: selectedSlot.count };
+                        this.player.inventory[this.player.selectedSlot] = null;
+                    } else if (this.active.fuel.itemId === selectedSlot.itemId) {
+                        this.active.fuel.count += selectedSlot.count;
+                        this.player.inventory[this.player.selectedSlot] = null;
+                    }
+                } else if (!selectedItem && this.active.fuel) {
+                    const item = getItemById(this.active.fuel.itemId);
+                    if (this.player.addToInventory(item, this.active.fuel.count) === 0) {
+                        this.active.fuel = null;
+                    }
+                }
+            } else if (slotType === 'output') {
+                if (this.active.output) {
+                    const item = getItemById(this.active.output.itemId);
+                    if (this.player.addToInventory(item, this.active.output.count) === 0) {
+                        this.active.output = null;
+                    }
+                }
+            }
+            this.updateUI();
+            if (this.onUIUpdate) this.onUIUpdate();
+        }
+
+        updateUI() {
+            if (!this.active) return;
+
+            const renderSlot = (slotEl, slotData) => {
+                slotEl.innerHTML = '';
+                if (slotData) {
+                    const item = getItemById(slotData.itemId);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 32;
+                    canvas.height = 32;
+                    const texture = this.getItemTexture(item, 32);
+                    if (texture) {
+                        canvas.getContext('2d').drawImage(texture, 0, 0, 32, 32);
+                    }
+                    slotEl.appendChild(canvas);
+                    if (slotData.count > 1) {
+                        const countEl = document.createElement('span');
+                        countEl.className = 'slot-count';
+                        countEl.textContent = slotData.count;
+                        slotEl.appendChild(countEl);
+                    }
+                }
+            };
+
+            renderSlot(this.dom.furnaceInput, this.active.input);
+            renderSlot(this.dom.furnaceFuel, this.active.fuel);
+            renderSlot(this.dom.furnaceOutput, this.active.output);
+
+            const { furnaceFire: fireEl, furnaceArrow: arrowEl, furnaceProgress: progressEl } = this.dom;
+            if (this.active.burnTime > 0) {
+                fireEl.classList.add('burning');
+                arrowEl.classList.add('active');
+            } else {
+                fireEl.classList.remove('burning');
+                arrowEl.classList.remove('active');
+            }
+            progressEl.style.width = (this.active.progress * 100) + '%';
+        }
+
+        update(dt, world) {
+            const dtSeconds = dt / 1000;
+
+            for (const furnace of this.furnaces.values()) {
+                // Check if furnace block still exists
+                const block = world.getBlock(furnace.x, furnace.y);
+                if (block.id !== BLOCKS.FURNACE.id) {
+                    this.furnaces.delete(`${furnace.x},${furnace.y}`);
+                    continue;
+                }
+
+                if (furnace.input && furnace.input.count > 0) {
+                    const recipe = SMELT_BY_INPUT.get(furnace.input.itemId);
+                    if (recipe) {
+                        const canOutput = !furnace.output ||
+                            (furnace.output.itemId === recipe.output.id && furnace.output.count < 64);
+
+                        if (canOutput) {
+                            // Try to consume fuel
+                            if (furnace.burnTime <= 0 && furnace.fuel && furnace.fuel.count > 0) {
+                                furnace.fuel.count--;
+                                if (furnace.fuel.count <= 0) furnace.fuel = null;
+                                furnace.burnTime = 80;
+                            }
+
+                            // Smelt if we have fuel burning
+                            if (furnace.burnTime > 0) {
+                                furnace.burnTime -= dtSeconds;
+                                furnace.progress += dtSeconds / recipe.time;
+
+                                if (furnace.progress >= 1) {
+                                    furnace.progress = 0;
+                                    furnace.input.count--;
+                                    if (furnace.input.count <= 0) furnace.input = null;
+
+                                    if (!furnace.output) {
+                                        furnace.output = { itemId: recipe.output.id, count: 1 };
+                                    } else {
+                                        furnace.output.count++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    furnace.progress = 0;
+                }
+
+                // Burn down fuel even if not smelting
+                if (furnace.burnTime > 0 && !furnace.input) {
+                    furnace.burnTime -= dtSeconds;
+                }
+            }
+
+            // Update UI if open
+            if (this.isOpen && this.active) {
+                this.updateUI();
+            }
         }
     }
 
@@ -2289,21 +2500,18 @@
             this.craftingOpen = false;
             this.setupCrafting();
 
-            // Furnace
-            this.furnaceOpen = false;
-            this.activeFurnace = null; // { x, y, input, fuel, output, progress, burnTime }
-            this.furnaces = new Map(); // Store furnace states by "x,y"
-            // Restore saved furnaces if any
+            // Furnace System
+            this.furnaceSystem = new FurnaceSystem(this.dom, this.getItemTexture.bind(this));
+            this.furnaceSystem.setPlayer(this.player);
+            this.furnaceSystem.setUIUpdateCallback(() => this.updateUI());
             if (this._savedFurnaces) {
-                this.furnaces = new Map(this._savedFurnaces);
+                this.furnaceSystem.loadState(this._savedFurnaces);
                 delete this._savedFurnaces;
             }
-            this.setupFurnace();
 
             // Touch controls
             this.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
             this.touchMode = 'mine'; // 'mine' or 'place'
-            this.touchTarget = { x: 0, y: 0 }; // Where to aim on touch devices
             if (this.isTouchDevice) {
                 document.body.classList.add('touch-visible');
                 this.setupTouchControls();
@@ -2435,8 +2643,8 @@
                         if (this.craftingOpen) {
                             this.closeCrafting();
                         }
-                        if (this.furnaceOpen) {
-                            this.closeFurnace();
+                        if (this.furnaceSystem.isOpen) {
+                            this.furnaceSystem.close();
                         }
                         break;
                 }
@@ -2497,9 +2705,6 @@
             const modeBtn = document.querySelector('.mode-btn');
             const modeLabel = document.getElementById('modeLabel');
             const crosshair = document.getElementById('touchCrosshair');
-
-            // Track active touches for multi-touch support
-            const activeTouches = new Map();
 
             // Prevent default touch behaviors on canvas
             this.canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
@@ -2952,223 +3157,6 @@
                 container.appendChild(section);
             }
         }
-
-        // --- FURNACE SYSTEM ---
-        setupFurnace() {
-            // Close button
-            document.getElementById('furnaceClose').onclick = () => this.closeFurnace();
-
-            // Click outside to close
-            document.getElementById('furnaceOverlay').onclick = (e) => {
-                if (e.target.id === 'furnaceOverlay') {
-                    this.closeFurnace();
-                }
-            };
-
-            // Slot click handlers
-            document.getElementById('furnaceInput').onclick = () => this.handleFurnaceSlotClick('input');
-            document.getElementById('furnaceFuel').onclick = () => this.handleFurnaceSlotClick('fuel');
-            document.getElementById('furnaceOutput').onclick = () => this.handleFurnaceSlotClick('output');
-        }
-
-        getFurnaceState(x, y) {
-            const key = `${x},${y}`;
-            if (!this.furnaces.has(key)) {
-                this.furnaces.set(key, {
-                    x, y,
-                    input: null,    // { itemId, count }
-                    fuel: null,     // { itemId, count }
-                    output: null,   // { itemId, count }
-                    progress: 0,    // 0-1 smelting progress
-                    burnTime: 0     // remaining burn time in seconds
-                });
-            }
-            return this.furnaces.get(key);
-        }
-
-        openFurnace(x, y) {
-            this.furnaceOpen = true;
-            this.activeFurnace = this.getFurnaceState(x, y);
-            this.dom.furnaceOverlay.classList.add('show');
-            this.updateFurnaceUI();
-        }
-
-        closeFurnace() {
-            this.furnaceOpen = false;
-            this.activeFurnace = null;
-            this.dom.furnaceOverlay.classList.remove('show');
-        }
-
-        handleFurnaceSlotClick(slotType) {
-            if (!this.activeFurnace) return;
-
-            const selectedItem = this.player.inventory[this.player.selectedSlot];
-
-            if (slotType === 'input') {
-                // Put smeltable item in input
-                if (selectedItem) {
-                    const item = getItemById(selectedItem.itemId);
-                    // Check if it's a valid smelting input
-                    const recipe = SMELTING_RECIPES.find(r => r.input.id === selectedItem.itemId);
-                    if (recipe) {
-                        if (!this.activeFurnace.input) {
-                            // Transfer item to furnace
-                            this.activeFurnace.input = { itemId: selectedItem.itemId, count: selectedItem.count };
-                            this.player.inventory[this.player.selectedSlot] = null;
-                        } else if (this.activeFurnace.input.itemId === selectedItem.itemId) {
-                            // Stack
-                            this.activeFurnace.input.count += selectedItem.count;
-                            this.player.inventory[this.player.selectedSlot] = null;
-                        }
-                    }
-                } else if (this.activeFurnace.input) {
-                    // Take item back
-                    const item = getItemById(this.activeFurnace.input.itemId);
-                    if (this.player.addToInventory(item, this.activeFurnace.input.count)) {
-                        this.activeFurnace.input = null;
-                    }
-                }
-            } else if (slotType === 'fuel') {
-                // Put coal in fuel slot
-                if (selectedItem && selectedItem.itemId === ITEMS.COAL.id) {
-                    if (!this.activeFurnace.fuel) {
-                        this.activeFurnace.fuel = { itemId: selectedItem.itemId, count: selectedItem.count };
-                        this.player.inventory[this.player.selectedSlot] = null;
-                    } else if (this.activeFurnace.fuel.itemId === selectedItem.itemId) {
-                        this.activeFurnace.fuel.count += selectedItem.count;
-                        this.player.inventory[this.player.selectedSlot] = null;
-                    }
-                } else if (!selectedItem && this.activeFurnace.fuel) {
-                    // Take fuel back
-                    const item = getItemById(this.activeFurnace.fuel.itemId);
-                    if (this.player.addToInventory(item, this.activeFurnace.fuel.count)) {
-                        this.activeFurnace.fuel = null;
-                    }
-                }
-            } else if (slotType === 'output') {
-                // Take output
-                if (this.activeFurnace.output) {
-                    const item = getItemById(this.activeFurnace.output.itemId);
-                    if (this.player.addToInventory(item, this.activeFurnace.output.count)) {
-                        this.activeFurnace.output = null;
-                    }
-                }
-            }
-
-            this.updateUI();
-            this.updateFurnaceUI();
-        }
-
-        updateFurnaceUI() {
-            if (!this.activeFurnace) return;
-
-            const renderSlot = (slotEl, slotData) => {
-                slotEl.innerHTML = '';
-                if (slotData) {
-                    const item = getItemById(slotData.itemId);
-                    const texture = this.getItemTexture(item, 32);
-                    if (texture) {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 32;
-                        canvas.height = 32;
-                        canvas.getContext('2d').drawImage(texture, 0, 0, 32, 32);
-                        slotEl.appendChild(canvas);
-                    }
-                    if (slotData.count > 1) {
-                        const countEl = document.createElement('span');
-                        countEl.className = 'slot-count';
-                        countEl.textContent = slotData.count;
-                        slotEl.appendChild(countEl);
-                    }
-                }
-            };
-
-            renderSlot(this.dom.furnaceInput, this.activeFurnace.input);
-            renderSlot(this.dom.furnaceFuel, this.activeFurnace.fuel);
-            renderSlot(this.dom.furnaceOutput, this.activeFurnace.output);
-
-            // Update fire and progress
-            const fireEl = this.dom.furnaceFire;
-            const arrowEl = this.dom.furnaceArrow;
-            const progressEl = this.dom.furnaceProgress;
-
-            if (this.activeFurnace.burnTime > 0) {
-                fireEl.classList.add('burning');
-                arrowEl.classList.add('active');
-            } else {
-                fireEl.classList.remove('burning');
-                arrowEl.classList.remove('active');
-            }
-
-            progressEl.style.width = (this.activeFurnace.progress * 100) + '%';
-        }
-
-        updateFurnaces(dt) {
-            const dtSeconds = dt / 1000;
-
-            for (const furnace of this.furnaces.values()) {
-                // Check if furnace block still exists
-                const block = this.world.getBlock(furnace.x, furnace.y);
-                if (block.id !== BLOCKS.FURNACE.id) {
-                    // Furnace was destroyed - drop items?
-                    this.furnaces.delete(`${furnace.x},${furnace.y}`);
-                    continue;
-                }
-
-                // Try to smelt
-                if (furnace.input && furnace.input.count > 0) {
-                    const recipe = SMELTING_RECIPES.find(r => r.input.id === furnace.input.itemId);
-                    if (recipe) {
-                        // Check if we can output
-                        const canOutput = !furnace.output ||
-                            (furnace.output.itemId === recipe.output.id && furnace.output.count < 64);
-
-                        if (canOutput) {
-                            // Need fuel?
-                            if (furnace.burnTime <= 0 && furnace.fuel && furnace.fuel.count > 0) {
-                                // Consume fuel (1 coal = 8 items worth of burn time)
-                                furnace.fuel.count--;
-                                if (furnace.fuel.count <= 0) furnace.fuel = null;
-                                furnace.burnTime = 80; // 80 seconds per coal (8 items * 10 sec each)
-                            }
-
-                            // Smelting in progress
-                            if (furnace.burnTime > 0) {
-                                furnace.burnTime -= dtSeconds;
-                                furnace.progress += dtSeconds / recipe.time;
-
-                                if (furnace.progress >= 1) {
-                                    // Smelting complete
-                                    furnace.progress = 0;
-                                    furnace.input.count--;
-                                    if (furnace.input.count <= 0) furnace.input = null;
-
-                                    if (!furnace.output) {
-                                        furnace.output = { itemId: recipe.output.id, count: 1 };
-                                    } else {
-                                        furnace.output.count++;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // No input, reset progress
-                    furnace.progress = 0;
-                }
-
-                // Continue burning even without input (burn time ticks down)
-                if (furnace.burnTime > 0 && !furnace.input) {
-                    furnace.burnTime -= dtSeconds;
-                }
-            }
-
-            // Update UI if furnace is open
-            if (this.furnaceOpen && this.activeFurnace) {
-                this.updateFurnaceUI();
-            }
-        }
-
         getBlockAtMouse() {
             const blockSize = CONFIG.BLOCK_SIZE;
             const screenCenterX = this.canvas.width / 2;
@@ -3285,7 +3273,7 @@
                 // Check for interactive blocks first (like furnace)
                 if (currentBlock.interactive) {
                     if (currentBlock.id === BLOCKS.FURNACE.id) {
-                        this.openFurnace(target.x, target.y);
+                        this.furnaceSystem.open(target.x, target.y);
                     }
                     return;
                 }
@@ -3329,6 +3317,9 @@
         }
 
         update(dt) {
+            // Clamp dt to prevent huge physics jumps after tab switch (centralized)
+            dt = Math.min(dt, CONFIG.MAX_DT);
+
             // Check for death
             if (this.player.isDead) {
                 this.dom.deathScreen.classList.add('show');
@@ -3364,7 +3355,7 @@
             this.handleBlockInteraction(dt);
 
             // Update furnaces
-            this.updateFurnaces(dt);
+            this.furnaceSystem.update(dt, this.world);
 
             // Update mobs
             this.updateMobs(dt);
@@ -3845,7 +3836,7 @@
                         // Convert Map to array of [key, value] pairs
                         modifiedBlocks: Array.from(this.world.modifiedBlocks.entries())
                     },
-                    furnaces: Array.from(this.furnaces.entries()),
+                    furnaces: this.furnaceSystem.getState(),
                     gameTime: this.gameTime
                 };
 
