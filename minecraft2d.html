@@ -2162,6 +2162,193 @@
         }
     }
 
+    // --- MOB SYSTEM MANAGER ---
+    class MobSystem {
+        constructor(maxMobs = 8) {
+            this.mobs = [];
+            this.maxMobs = maxMobs;
+            this.spawnCooldown = 0;
+
+            // These are set after construction
+            this.player = null;
+            this.world = null;
+            this.onMobHitPlayer = null; // callback: () => void
+            this.onMobKilled = null;    // callback: (mobType) => void
+        }
+
+        setPlayer(player) { this.player = player; }
+        setWorld(world) { this.world = world; }
+        setCallbacks(onMobHitPlayer, onMobKilled) {
+            this.onMobHitPlayer = onMobHitPlayer;
+            this.onMobKilled = onMobKilled;
+        }
+
+        update(dt, dayProgress) {
+            this.updateMobs(dt);
+            this.spawnMobs(dt, dayProgress);
+        }
+
+        updateMobs(dt) {
+            if (!this.player || !this.world) return;
+
+            for (let i = this.mobs.length - 1; i >= 0; i--) {
+                const mob = this.mobs[i];
+                const result = mob.update(this.world, this.player, dt);
+
+                // Mob hit player
+                if (result && result.hitPlayer && this.onMobHitPlayer) {
+                    this.onMobHitPlayer();
+                }
+
+                // Remove dead mobs
+                if (mob.isDead) {
+                    this.mobs.splice(i, 1);
+                }
+
+                // Remove mobs too far from player
+                const dist = Math.abs(mob.x - this.player.x);
+                if (dist > 50) {
+                    this.mobs.splice(i, 1);
+                }
+            }
+        }
+
+        spawnMobs(dt, dayProgress) {
+            if (!this.player || !this.world) return;
+
+            // Only spawn at night (dayProgress 0.75-1.0 and 0-0.25 is night)
+            const isNight = dayProgress > 0.75 || dayProgress < 0.25;
+            if (!isNight) return;
+
+            // Cooldown between spawns
+            this.spawnCooldown -= dt / 1000;
+            if (this.spawnCooldown > 0) return;
+
+            // Don't exceed max mobs
+            if (this.mobs.length >= this.maxMobs) return;
+
+            // Try to spawn a mob
+            this.spawnCooldown = 3 + Math.random() * 5; // 3-8 seconds between spawns
+
+            // Spawn off-screen but within reasonable distance
+            const spawnSide = Math.random() < 0.5 ? -1 : 1;
+            const spawnX = this.player.x + spawnSide * (15 + Math.random() * 10);
+
+            // Find ground level at spawn point
+            let spawnY = 0;
+            for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
+                if (this.world.getBlock(Math.floor(spawnX), y).solid) {
+                    spawnY = y - 1;
+                    break;
+                }
+            }
+
+            // Don't spawn underground (too deep)
+            if (spawnY > this.player.y + 10) return;
+
+            // Don't spawn if inside a block
+            if (this.world.getBlock(Math.floor(spawnX), Math.floor(spawnY)).solid ||
+                this.world.getBlock(Math.floor(spawnX), Math.floor(spawnY - 1)).solid) {
+                return;
+            }
+
+            // Create the zombie
+            const zombie = new Mob(spawnX, spawnY, 'zombie');
+            this.mobs.push(zombie);
+        }
+
+        tryAttackMob(worldX, worldY, heldItem) {
+            if (!this.player) return null;
+
+            for (const mob of this.mobs) {
+                if (mob.isDead) continue;
+
+                if (mob.containsPoint(worldX, worldY)) {
+                    // Calculate damage based on held item
+                    let damage = 1; // Fist damage
+
+                    if (heldItem) {
+                        if (heldItem.type === 'axe') {
+                            damage = 4;
+                        } else if (heldItem.type === 'pickaxe') {
+                            damage = 2;
+                        } else if (heldItem.type === 'shovel') {
+                            damage = 2;
+                        }
+                    }
+
+                    // Knockback direction (away from player)
+                    const knockbackDir = mob.x > this.player.x ? 1 : -1;
+
+                    // Deal damage
+                    const died = mob.takeDamage(damage, knockbackDir);
+
+                    if (died && this.onMobKilled) {
+                        this.onMobKilled(mob.type);
+                    }
+
+                    return mob;
+                }
+            }
+            return null;
+        }
+
+        render(ctx, canvas, cameraX, cameraY) {
+            const blockSize = CONFIG.BLOCK_SIZE;
+            const screenCenterX = canvas.width / 2;
+            const screenCenterY = canvas.height / 2;
+
+            for (const mob of this.mobs) {
+                if (mob.isDead) continue;
+
+                const px = screenCenterX + (mob.x - cameraX) * blockSize;
+                const py = screenCenterY + (mob.y - cameraY) * blockSize;
+
+                const w = mob.width * blockSize;
+                const h = mob.height * blockSize;
+
+                // Flash white when taking damage
+                const isHurt = mob.invincibleTime > 0;
+
+                // Body
+                ctx.fillStyle = isHurt ? '#ffffff' : mob.color;
+                ctx.fillRect(px - w/2, py - h * 0.7, w, h * 0.5);
+
+                // Head
+                ctx.fillStyle = isHurt ? '#ffffff' : '#4a8c4a';
+                ctx.fillRect(px - w/2 * 0.9, py - h, w * 0.9, h * 0.35);
+
+                // Eyes (red for zombie)
+                ctx.fillStyle = '#ff0000';
+                const eyeOffset = mob.facingRight ? 0.1 : -0.1;
+                ctx.fillRect(px - w * 0.15 + w * eyeOffset, py - h * 0.9, w * 0.12, w * 0.08);
+                ctx.fillRect(px + w * 0.05 + w * eyeOffset, py - h * 0.9, w * 0.12, w * 0.08);
+
+                // Arms (reaching out)
+                ctx.fillStyle = isHurt ? '#ffffff' : mob.color;
+                const armDir = mob.facingRight ? 1 : -1;
+                ctx.fillRect(px + armDir * w * 0.3, py - h * 0.6, w * 0.5 * armDir, h * 0.1);
+
+                // Legs
+                ctx.fillStyle = isHurt ? '#ffffff' : '#1a4a1a';
+                ctx.fillRect(px - w/2, py - h * 0.2, w * 0.35, h * 0.2);
+                ctx.fillRect(px + w/2 - w * 0.35, py - h * 0.2, w * 0.35, h * 0.2);
+
+                // Health bar (if damaged)
+                if (mob.health < mob.maxHealth) {
+                    const barWidth = w;
+                    const barHeight = 4;
+                    const healthPercent = mob.health / mob.maxHealth;
+
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(px - barWidth/2, py - h - 10, barWidth, barHeight);
+                    ctx.fillStyle = '#ff3333';
+                    ctx.fillRect(px - barWidth/2, py - h - 10, barWidth * healthPercent, barHeight);
+                }
+            }
+        }
+    }
+
     // --- FURNACE SYSTEM ---
     class FurnaceSystem {
         constructor(dom, getItemTexture) {
@@ -2365,6 +2552,230 @@
         }
     }
 
+    // --- CRAFTING SYSTEM ---
+    class CraftingSystem {
+        constructor(dom, getItemTexture) {
+            this.dom = dom;
+            this.getItemTexture = getItemTexture;
+            this.isOpen = false;
+            this.player = null;
+            this.onUIUpdate = null;
+            this.onNotification = null;
+
+            // Setup event handlers
+            document.getElementById('craftingClose').onclick = () => this.close();
+            document.getElementById('craftingOverlay').onclick = (e) => {
+                if (e.target.id === 'craftingOverlay') this.close();
+            };
+        }
+
+        setPlayer(player) { this.player = player; }
+        setCallbacks(onUIUpdate, onNotification) {
+            this.onUIUpdate = onUIUpdate;
+            this.onNotification = onNotification;
+        }
+
+        toggle() {
+            if (this.isOpen) this.close();
+            else this.open();
+        }
+
+        open() {
+            this.isOpen = true;
+            this.dom.craftingOverlay.classList.add('show');
+            this.renderRecipes();
+        }
+
+        close() {
+            this.isOpen = false;
+            this.dom.craftingOverlay.classList.remove('show');
+        }
+
+        countItem(itemId) {
+            let count = 0;
+            for (const slot of this.player.inventory) {
+                if (slot && slot.itemId === itemId) count += slot.count;
+            }
+            return count;
+        }
+
+        canCraft(recipe) {
+            for (const ingredient of recipe.ingredients) {
+                if (this.countItem(ingredient.item.id) < ingredient.count) return false;
+            }
+            return true;
+        }
+
+        consumeIngredients(recipe) {
+            for (const ingredient of recipe.ingredients) {
+                let remaining = ingredient.count;
+                for (let i = 0; i < this.player.inventory.length && remaining > 0; i++) {
+                    const slot = this.player.inventory[i];
+                    if (slot && slot.itemId === ingredient.item.id) {
+                        const take = Math.min(slot.count, remaining);
+                        slot.count -= take;
+                        remaining -= take;
+                        if (slot.count <= 0) this.player.inventory[i] = null;
+                    }
+                }
+            }
+        }
+
+        craft(recipe) {
+            if (!this.canCraft(recipe)) return false;
+
+            const result = recipe.result;
+            const resultCount = recipe.resultCount;
+
+            // Test if result fits (virtual inventory check)
+            const testInv = JSON.parse(JSON.stringify(this.player.inventory));
+
+            // Virtually consume ingredients
+            for (const ingredient of recipe.ingredients) {
+                let remaining = ingredient.count;
+                for (let i = 0; i < testInv.length && remaining > 0; i++) {
+                    const slot = testInv[i];
+                    if (slot && slot.itemId === ingredient.item.id) {
+                        const take = Math.min(slot.count, remaining);
+                        slot.count -= take;
+                        remaining -= take;
+                        if (slot.count <= 0) testInv[i] = null;
+                    }
+                }
+            }
+
+            // Check if result fits
+            let canFit = false;
+            const canStack = result.stackable !== false;
+            const maxStack = canStack ? 64 : 1;
+
+            if (canStack) {
+                for (const slot of testInv) {
+                    if (slot && slot.itemId === result.id && slot.count + resultCount <= maxStack) {
+                        canFit = true;
+                        break;
+                    }
+                }
+            }
+            if (!canFit) {
+                for (const slot of testInv) {
+                    if (!slot) { canFit = true; break; }
+                }
+            }
+
+            if (!canFit) {
+                if (this.onNotification) this.onNotification('Inventory full!');
+                return false;
+            }
+
+            // Actually craft
+            this.consumeIngredients(recipe);
+            this.player.addToInventory(result, resultCount);
+            if (this.onUIUpdate) this.onUIUpdate();
+            this.renderRecipes();
+            return true;
+        }
+
+        renderRecipes() {
+            const container = this.dom.craftingRecipes;
+            container.innerHTML = '';
+
+            // Group recipes by category
+            const categories = {
+                'Materials': [], 'Wood Tools': [], 'Stone Tools': [],
+                'Iron Tools': [], 'Diamond Tools': [], 'Blocks': []
+            };
+
+            for (const recipe of RECIPES) {
+                const result = recipe.result;
+                if (result.id === ITEMS.STICK?.id || result.id === BLOCKS.PLANKS?.id) {
+                    categories['Materials'].push(recipe);
+                } else if (result.tier === 'wood') {
+                    categories['Wood Tools'].push(recipe);
+                } else if (result.tier === 'stone') {
+                    categories['Stone Tools'].push(recipe);
+                } else if (result.tier === 'iron') {
+                    categories['Iron Tools'].push(recipe);
+                } else if (result.tier === 'diamond') {
+                    categories['Diamond Tools'].push(recipe);
+                } else {
+                    categories['Blocks'].push(recipe);
+                }
+            }
+
+            for (const [category, recipes] of Object.entries(categories)) {
+                if (recipes.length === 0) continue;
+
+                const section = document.createElement('div');
+                section.className = 'craft-section';
+                section.innerHTML = `<h3>${category}</h3>`;
+
+                const grid = document.createElement('div');
+                grid.className = 'recipe-grid';
+
+                for (const recipe of recipes) {
+                    const canCraft = this.canCraft(recipe);
+                    const item = document.createElement('div');
+                    item.className = 'recipe-item' + (canCraft ? ' can-craft' : '');
+
+                    // Header with icon and name
+                    const header = document.createElement('div');
+                    header.className = 'recipe-header';
+
+                    const iconDiv = document.createElement('div');
+                    iconDiv.className = 'recipe-icon';
+                    const texture = this.getItemTexture(recipe.result, 32);
+                    if (texture) {
+                        const img = document.createElement('canvas');
+                        img.width = 24; img.height = 24;
+                        img.getContext('2d').drawImage(texture, 0, 0, 24, 24);
+                        iconDiv.appendChild(img);
+                    }
+                    header.appendChild(iconDiv);
+
+                    const nameDiv = document.createElement('div');
+                    nameDiv.innerHTML = `<div class="recipe-name">${recipe.name}</div>` +
+                        (recipe.resultCount > 1 ? `<div class="recipe-count">x${recipe.resultCount}</div>` : '');
+                    header.appendChild(nameDiv);
+                    item.appendChild(header);
+
+                    // Ingredients
+                    const ingredientsDiv = document.createElement('div');
+                    ingredientsDiv.className = 'recipe-ingredients';
+
+                    for (const ing of recipe.ingredients) {
+                        const ingDiv = document.createElement('div');
+                        ingDiv.className = 'ingredient';
+
+                        const ingTexture = this.getItemTexture(ing.item, 16);
+                        if (ingTexture) {
+                            const ingImg = document.createElement('canvas');
+                            ingImg.className = 'ingredient-icon';
+                            ingImg.width = 16; ingImg.height = 16;
+                            ingImg.getContext('2d').drawImage(ingTexture, 0, 0, 16, 16);
+                            ingDiv.appendChild(ingImg);
+                        }
+
+                        const hasCount = this.countItem(ing.item.id);
+                        const hasEnough = hasCount >= ing.count;
+                        const textSpan = document.createElement('span');
+                        textSpan.className = 'ingredient-text ' + (hasEnough ? 'has-enough' : 'not-enough');
+                        textSpan.textContent = `${hasCount}/${ing.count}`;
+                        ingDiv.appendChild(textSpan);
+                        ingredientsDiv.appendChild(ingDiv);
+                    }
+
+                    item.appendChild(ingredientsDiv);
+                    item.onclick = () => this.craft(recipe);
+                    grid.appendChild(item);
+                }
+
+                section.appendChild(grid);
+                container.appendChild(section);
+            }
+        }
+    }
+
     // --- GAME ---
     class Game {
         constructor() {
@@ -2491,14 +2902,19 @@
             // Mining
             this.mining = { active: false, x: 0, y: 0, progress: 0, target: null };
 
-            // Mobs
-            this.mobs = [];
-            this.maxMobs = 8;
-            this.mobSpawnCooldown = 0;
+            // Mob System
+            this.mobSystem = new MobSystem(8);
+            this.mobSystem.setPlayer(this.player);
+            this.mobSystem.setWorld(this.world);
+            this.mobSystem.setCallbacks(
+                () => { this.showDamageEffect(); this.updateHealthBar(); },
+                (mobType) => this.showNotification(`${mobType.charAt(0).toUpperCase() + mobType.slice(1)} slain!`)
+            );
 
-            // Crafting
-            this.craftingOpen = false;
-            this.setupCrafting();
+            // Crafting System
+            this.craftingSystem = new CraftingSystem(this.dom, this.getItemTexture.bind(this));
+            this.craftingSystem.setPlayer(this.player);
+            this.craftingSystem.setCallbacks(() => this.updateUI(), (msg) => this.showNotification(msg));
 
             // Furnace System
             this.furnaceSystem = new FurnaceSystem(this.dom, this.getItemTexture.bind(this));
@@ -2636,12 +3052,12 @@
                         break;
                     case 'KeyE':
                         // Toggle crafting menu
-                        this.toggleCrafting();
+                        this.craftingSystem.toggle();
                         break;
                     case 'Escape':
                         // Close menus
-                        if (this.craftingOpen) {
-                            this.closeCrafting();
+                        if (this.craftingSystem.isOpen) {
+                            this.craftingSystem.close();
                         }
                         if (this.furnaceSystem.isOpen) {
                             this.furnaceSystem.close();
@@ -2895,143 +3311,6 @@
             });
         }
 
-        // --- CRAFTING SYSTEM ---
-        setupCrafting() {
-            // Close button
-            document.getElementById('craftingClose').onclick = () => this.closeCrafting();
-
-            // Click outside to close
-            document.getElementById('craftingOverlay').onclick = (e) => {
-                if (e.target.id === 'craftingOverlay') {
-                    this.closeCrafting();
-                }
-            };
-        }
-
-        toggleCrafting() {
-            if (this.craftingOpen) {
-                this.closeCrafting();
-            } else {
-                this.openCrafting();
-            }
-        }
-
-        openCrafting() {
-            this.craftingOpen = true;
-            this.dom.craftingOverlay.classList.add('show');
-            this.renderCraftingRecipes();
-        }
-
-        closeCrafting() {
-            this.craftingOpen = false;
-            this.dom.craftingOverlay.classList.remove('show');
-        }
-
-        // Count how many of an item the player has
-        countItem(itemId) {
-            let count = 0;
-            for (const slot of this.player.inventory) {
-                if (slot && slot.itemId === itemId) {
-                    count += slot.count;
-                }
-            }
-            return count;
-        }
-
-        // Check if player can craft a recipe
-        canCraft(recipe) {
-            for (const ingredient of recipe.ingredients) {
-                if (this.countItem(ingredient.item.id) < ingredient.count) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        // Remove items from inventory for crafting
-        consumeIngredients(recipe) {
-            for (const ingredient of recipe.ingredients) {
-                let remaining = ingredient.count;
-                for (let i = 0; i < this.player.inventory.length && remaining > 0; i++) {
-                    const slot = this.player.inventory[i];
-                    if (slot && slot.itemId === ingredient.item.id) {
-                        const take = Math.min(slot.count, remaining);
-                        slot.count -= take;
-                        remaining -= take;
-                        if (slot.count <= 0) {
-                            this.player.inventory[i] = null;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Craft a recipe
-        craft(recipe) {
-            if (!this.canCraft(recipe)) return false;
-
-            // Check if we have room in inventory
-            const result = recipe.result;
-            const resultCount = recipe.resultCount;
-
-            // Try to add result to inventory
-            const testPlayer = { inventory: JSON.parse(JSON.stringify(this.player.inventory)) };
-
-            // Consume ingredients first (virtually)
-            for (const ingredient of recipe.ingredients) {
-                let remaining = ingredient.count;
-                for (let i = 0; i < testPlayer.inventory.length && remaining > 0; i++) {
-                    const slot = testPlayer.inventory[i];
-                    if (slot && slot.itemId === ingredient.item.id) {
-                        const take = Math.min(slot.count, remaining);
-                        slot.count -= take;
-                        remaining -= take;
-                        if (slot.count <= 0) {
-                            testPlayer.inventory[i] = null;
-                        }
-                    }
-                }
-            }
-
-            // Check if result fits
-            let canFit = false;
-            const canStack = result.stackable !== false;
-            const maxStack = canStack ? 64 : 1;
-
-            // Try to stack with existing
-            if (canStack) {
-                for (const slot of testPlayer.inventory) {
-                    if (slot && slot.itemId === result.id && slot.count + resultCount <= maxStack) {
-                        canFit = true;
-                        break;
-                    }
-                }
-            }
-
-            // Try to find empty slot
-            if (!canFit) {
-                for (const slot of testPlayer.inventory) {
-                    if (!slot) {
-                        canFit = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!canFit) {
-                this.showNotification('Inventory full!');
-                return false;
-            }
-
-            // Actually consume and craft
-            this.consumeIngredients(recipe);
-            this.player.addToInventory(result, resultCount);
-            this.updateUI();
-            this.renderCraftingRecipes();
-
-            return true;
-        }
-
         // Get texture for any item (block, tool, or material)
         getItemTexture(item, size = 32) {
             if (!item) return null;
@@ -3044,119 +3323,6 @@
             }
         }
 
-        renderCraftingRecipes() {
-            const container = this.dom.craftingRecipes;
-            container.innerHTML = '';
-
-            // Group recipes by category
-            const categories = {
-                'Materials': [],
-                'Wood Tools': [],
-                'Stone Tools': [],
-                'Iron Tools': [],
-                'Diamond Tools': [],
-                'Blocks': []
-            };
-
-            for (const recipe of RECIPES) {
-                const result = recipe.result;
-                if (result.id === ITEMS.STICK?.id || result.id === BLOCKS.PLANKS?.id) {
-                    categories['Materials'].push(recipe);
-                } else if (result.tier === 'wood') {
-                    categories['Wood Tools'].push(recipe);
-                } else if (result.tier === 'stone') {
-                    categories['Stone Tools'].push(recipe);
-                } else if (result.tier === 'iron') {
-                    categories['Iron Tools'].push(recipe);
-                } else if (result.tier === 'diamond') {
-                    categories['Diamond Tools'].push(recipe);
-                } else {
-                    categories['Blocks'].push(recipe);
-                }
-            }
-
-            for (const [category, recipes] of Object.entries(categories)) {
-                if (recipes.length === 0) continue;
-
-                const section = document.createElement('div');
-                section.className = 'craft-section';
-                section.innerHTML = `<h3>${category}</h3>`;
-
-                const grid = document.createElement('div');
-                grid.className = 'recipe-grid';
-
-                for (const recipe of recipes) {
-                    const canCraft = this.canCraft(recipe);
-                    const item = document.createElement('div');
-                    item.className = 'recipe-item' + (canCraft ? ' can-craft' : '');
-
-                    // Recipe header with icon and name
-                    const header = document.createElement('div');
-                    header.className = 'recipe-header';
-
-                    const iconDiv = document.createElement('div');
-                    iconDiv.className = 'recipe-icon';
-                    const texture = this.getItemTexture(recipe.result, 32);
-                    if (texture) {
-                        const img = document.createElement('canvas');
-                        img.width = 24;
-                        img.height = 24;
-                        img.getContext('2d').drawImage(texture, 0, 0, 24, 24);
-                        iconDiv.appendChild(img);
-                    }
-                    header.appendChild(iconDiv);
-
-                    const nameDiv = document.createElement('div');
-                    nameDiv.innerHTML = `<div class="recipe-name">${recipe.name}</div>` +
-                        (recipe.resultCount > 1 ? `<div class="recipe-count">x${recipe.resultCount}</div>` : '');
-                    header.appendChild(nameDiv);
-
-                    item.appendChild(header);
-
-                    // Ingredients
-                    const ingredientsDiv = document.createElement('div');
-                    ingredientsDiv.className = 'recipe-ingredients';
-
-                    for (const ing of recipe.ingredients) {
-                        const ingDiv = document.createElement('div');
-                        ingDiv.className = 'ingredient';
-
-                        const ingTexture = this.getItemTexture(ing.item, 16);
-                        if (ingTexture) {
-                            const ingImg = document.createElement('canvas');
-                            ingImg.className = 'ingredient-icon';
-                            ingImg.width = 16;
-                            ingImg.height = 16;
-                            ingImg.getContext('2d').drawImage(ingTexture, 0, 0, 16, 16);
-                            ingDiv.appendChild(ingImg);
-                        }
-
-                        const hasCount = this.countItem(ing.item.id);
-                        const hasEnough = hasCount >= ing.count;
-                        const textSpan = document.createElement('span');
-                        textSpan.className = 'ingredient-text ' + (hasEnough ? 'has-enough' : 'not-enough');
-                        textSpan.textContent = `${hasCount}/${ing.count}`;
-                        ingDiv.appendChild(textSpan);
-
-                        ingredientsDiv.appendChild(ingDiv);
-                    }
-
-                    item.appendChild(ingredientsDiv);
-
-                    // Click to craft
-                    item.onclick = () => {
-                        if (this.craft(recipe)) {
-                            // Success feedback could go here
-                        }
-                    };
-
-                    grid.appendChild(item);
-                }
-
-                section.appendChild(grid);
-                container.appendChild(section);
-            }
-        }
         getBlockAtMouse() {
             const blockSize = CONFIG.BLOCK_SIZE;
             const screenCenterX = this.canvas.width / 2;
@@ -3187,7 +3353,7 @@
             // Left click - attack mobs or mine blocks
             if (this.mouse.left) {
                 // Check if clicking on a mob first
-                const attackedMob = this.tryAttackMob(target.worldX, target.worldY);
+                const attackedMob = this.mobSystem.tryAttackMob(target.worldX, target.worldY, this.player.getHeldItem());
                 if (attackedMob) {
                     this.player.startSwing();
                     // Don't mine while attacking
@@ -3358,118 +3524,11 @@
             this.furnaceSystem.update(dt, this.world);
 
             // Update mobs
-            this.updateMobs(dt);
-
-            // Spawn mobs at night
-            this.spawnMobs(dt);
+            this.mobSystem.update(dt, this.dayProgress);
 
             // Update time
             this.gameTime += dt / 1000;
             this.dayProgress = (this.gameTime / CONFIG.DAY_LENGTH) % 1;
-        }
-
-        updateMobs(dt) {
-            // Update each mob and check for player damage
-            for (let i = this.mobs.length - 1; i >= 0; i--) {
-                const mob = this.mobs[i];
-                const result = mob.update(this.world, this.player, dt);
-
-                // Mob hit player
-                if (result && result.hitPlayer) {
-                    this.showDamageEffect();
-                    this.updateHealthBar();
-                }
-
-                // Remove dead mobs
-                if (mob.isDead) {
-                    this.mobs.splice(i, 1);
-                }
-
-                // Remove mobs too far from player
-                const dist = Math.abs(mob.x - this.player.x);
-                if (dist > 50) {
-                    this.mobs.splice(i, 1);
-                }
-            }
-        }
-
-        spawnMobs(dt) {
-            // Only spawn at night (dayProgress 0.75-1.0 and 0-0.25 is night)
-            const isNight = this.dayProgress > 0.75 || this.dayProgress < 0.25;
-            if (!isNight) return;
-
-            // Cooldown between spawns
-            this.mobSpawnCooldown -= dt / 1000;
-            if (this.mobSpawnCooldown > 0) return;
-
-            // Don't exceed max mobs
-            if (this.mobs.length >= this.maxMobs) return;
-
-            // Try to spawn a mob
-            this.mobSpawnCooldown = 3 + Math.random() * 5; // 3-8 seconds between spawns
-
-            // Spawn off-screen but within reasonable distance
-            const spawnSide = Math.random() < 0.5 ? -1 : 1;
-            const spawnX = this.player.x + spawnSide * (15 + Math.random() * 10);
-
-            // Find ground level at spawn point
-            let spawnY = 0;
-            for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
-                if (this.world.getBlock(Math.floor(spawnX), y).solid) {
-                    spawnY = y - 1;
-                    break;
-                }
-            }
-
-            // Don't spawn underground (too deep)
-            if (spawnY > this.player.y + 10) return;
-
-            // Don't spawn if inside a block
-            if (this.world.getBlock(Math.floor(spawnX), Math.floor(spawnY)).solid ||
-                this.world.getBlock(Math.floor(spawnX), Math.floor(spawnY - 1)).solid) {
-                return;
-            }
-
-            // Create the zombie
-            const zombie = new Mob(spawnX, spawnY, 'zombie');
-            this.mobs.push(zombie);
-        }
-
-        tryAttackMob(worldX, worldY) {
-            // Check if click is on any mob
-            for (const mob of this.mobs) {
-                if (mob.isDead) continue;
-
-                if (mob.containsPoint(worldX, worldY)) {
-                    // Calculate damage based on held item
-                    const heldItem = this.player.getHeldItem();
-                    let damage = 1; // Fist damage
-
-                    if (heldItem) {
-                        if (heldItem.type === 'axe') {
-                            damage = 4; // Axes do good damage
-                        } else if (heldItem.type === 'pickaxe') {
-                            damage = 2;
-                        } else if (heldItem.type === 'shovel') {
-                            damage = 2;
-                        }
-                    }
-
-                    // Knockback direction (away from player)
-                    const knockbackDir = mob.x > this.player.x ? 1 : -1;
-
-                    // Deal damage
-                    const died = mob.takeDamage(damage, knockbackDir);
-
-                    if (died) {
-                        // Mob died - could drop items here
-                        this.showNotification('Zombie slain!');
-                    }
-
-                    return mob;
-                }
-            }
-            return null;
         }
 
         showDamageEffect() {
@@ -3564,7 +3623,7 @@
             this.renderPlayer();
 
             // Render mobs
-            this.renderMobs();
+            this.mobSystem.render(this.ctx, this.canvas, this.cameraX, this.cameraY);
 
             // Highlight hovered block
             const target = this.getBlockAtMouse();
@@ -3746,62 +3805,6 @@
             }
 
             ctx.restore();
-        }
-
-        renderMobs() {
-            const ctx = this.ctx;
-            const blockSize = CONFIG.BLOCK_SIZE;
-            const screenCenterX = this.canvas.width / 2;
-            const screenCenterY = this.canvas.height / 2;
-
-            for (const mob of this.mobs) {
-                if (mob.isDead) continue;
-
-                const px = screenCenterX + (mob.x - this.cameraX) * blockSize;
-                const py = screenCenterY + (mob.y - this.cameraY) * blockSize;
-
-                const w = mob.width * blockSize;
-                const h = mob.height * blockSize;
-
-                // Flash white when taking damage
-                const isHurt = mob.invincibleTime > 0;
-
-                // Body
-                ctx.fillStyle = isHurt ? '#ffffff' : mob.color;
-                ctx.fillRect(px - w/2, py - h * 0.7, w, h * 0.5);
-
-                // Head
-                ctx.fillStyle = isHurt ? '#ffffff' : '#4a8c4a';
-                ctx.fillRect(px - w/2 * 0.9, py - h, w * 0.9, h * 0.35);
-
-                // Eyes (red for zombie)
-                ctx.fillStyle = '#ff0000';
-                const eyeOffset = mob.facingRight ? 0.1 : -0.1;
-                ctx.fillRect(px - w * 0.15 + w * eyeOffset, py - h * 0.9, w * 0.12, w * 0.08);
-                ctx.fillRect(px + w * 0.05 + w * eyeOffset, py - h * 0.9, w * 0.12, w * 0.08);
-
-                // Arms (reaching out)
-                ctx.fillStyle = isHurt ? '#ffffff' : mob.color;
-                const armDir = mob.facingRight ? 1 : -1;
-                ctx.fillRect(px + armDir * w * 0.3, py - h * 0.6, w * 0.5 * armDir, h * 0.1);
-
-                // Legs
-                ctx.fillStyle = isHurt ? '#ffffff' : '#1a4a1a';
-                ctx.fillRect(px - w/2, py - h * 0.2, w * 0.35, h * 0.2);
-                ctx.fillRect(px + w/2 - w * 0.35, py - h * 0.2, w * 0.35, h * 0.2);
-
-                // Health bar (if damaged)
-                if (mob.health < mob.maxHealth) {
-                    const barWidth = w;
-                    const barHeight = 4;
-                    const healthPercent = mob.health / mob.maxHealth;
-
-                    ctx.fillStyle = '#333';
-                    ctx.fillRect(px - barWidth/2, py - h - 10, barWidth, barHeight);
-                    ctx.fillStyle = '#ff3333';
-                    ctx.fillRect(px - barWidth/2, py - h - 10, barWidth * healthPercent, barHeight);
-                }
-            }
         }
 
         lerpColor(a, b, t) {
