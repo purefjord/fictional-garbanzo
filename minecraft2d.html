@@ -2163,6 +2163,29 @@
             this.resize();
             window.addEventListener('resize', () => this.resize());
 
+            // Cache DOM elements early (before any showNotification calls)
+            this.dom = {
+                fps: document.getElementById('fps'),
+                position: document.getElementById('position'),
+                timeDisplay: document.getElementById('timeDisplay'),
+                deathScreen: document.getElementById('deathScreen'),
+                miningProgress: document.getElementById('miningProgress'),
+                miningFill: document.querySelector('#miningProgress .fill'),
+                damageOverlay: document.getElementById('damageOverlay'),
+                healthBar: document.getElementById('healthBar'),
+                saveNotification: document.getElementById('saveNotification'),
+                craftingOverlay: document.getElementById('craftingOverlay'),
+                craftingRecipes: document.getElementById('craftingRecipes'),
+                furnaceOverlay: document.getElementById('furnaceOverlay'),
+                furnaceInput: document.getElementById('furnaceInput'),
+                furnaceFuel: document.getElementById('furnaceFuel'),
+                furnaceOutput: document.getElementById('furnaceOutput'),
+                furnaceFire: document.getElementById('furnaceFire'),
+                furnaceArrow: document.getElementById('furnaceArrow'),
+                furnaceProgress: document.getElementById('furnaceProgress'),
+                touchCrosshair: document.getElementById('touchCrosshair'),
+            };
+
             // Try to load saved game
             const saveData = this.loadGame();
 
@@ -2315,29 +2338,6 @@
             // UI
             this.setupUI();
             this.updateHealthBar();
-
-            // Cache DOM elements for performance (avoid repeated lookups)
-            this.dom = {
-                fps: document.getElementById('fps'),
-                position: document.getElementById('position'),
-                timeDisplay: document.getElementById('timeDisplay'),
-                deathScreen: document.getElementById('deathScreen'),
-                miningProgress: document.getElementById('miningProgress'),
-                miningFill: document.querySelector('#miningProgress .fill'),
-                damageOverlay: document.getElementById('damageOverlay'),
-                healthBar: document.getElementById('healthBar'),
-                saveNotification: document.getElementById('saveNotification'),
-                craftingOverlay: document.getElementById('craftingOverlay'),
-                craftingRecipes: document.getElementById('craftingRecipes'),
-                furnaceOverlay: document.getElementById('furnaceOverlay'),
-                furnaceInput: document.getElementById('furnaceInput'),
-                furnaceFuel: document.getElementById('furnaceFuel'),
-                furnaceOutput: document.getElementById('furnaceOutput'),
-                furnaceFire: document.getElementById('furnaceFire'),
-                furnaceArrow: document.getElementById('furnaceArrow'),
-                furnaceProgress: document.getElementById('furnaceProgress'),
-                touchCrosshair: document.getElementById('touchCrosshair'),
-            };
 
             // Respawn button handler
             document.getElementById('respawnBtn').onclick = () => this.respawnPlayer();
