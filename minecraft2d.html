@@ -680,9 +680,12 @@
         WORLD_WIDTH: 512,      // blocks
         WORLD_HEIGHT: 256,     // blocks
         SURFACE_HEIGHT: 180,   // base surface level
-        GRAVITY: 0.5,
-        JUMP_FORCE: 10,
-        MOVE_SPEED: 5,
+        // Physics values in blocks/second or blocks/second²
+        GRAVITY: 30,           // blocks/second² (acceleration)
+        JUMP_FORCE: 10,        // blocks/second (initial velocity)
+        MOVE_SPEED: 5,         // blocks/second
+        TERMINAL_VELOCITY: 20, // blocks/second (max fall speed)
+        MAX_DT: 50,            // ms - clamp dt to prevent huge jumps after tab switch
         PLAYER_WIDTH: 0.6,     // in blocks
         PLAYER_HEIGHT: 1.8,    // in blocks
         REACH_DISTANCE: 5,     // blocks
@@ -730,20 +733,20 @@
 
     const TOOLS = {
         // Pickaxes - for stone, ores
-        WOOD_PICKAXE: { id: 100, name: 'Wood Pickaxe', type: 'pickaxe', tier: 'wood', isItem: true },
-        STONE_PICKAXE: { id: 101, name: 'Stone Pickaxe', type: 'pickaxe', tier: 'stone', isItem: true },
-        IRON_PICKAXE: { id: 102, name: 'Iron Pickaxe', type: 'pickaxe', tier: 'iron', isItem: true },
-        DIAMOND_PICKAXE: { id: 103, name: 'Diamond Pickaxe', type: 'pickaxe', tier: 'diamond', isItem: true },
+        WOOD_PICKAXE: { id: 100, name: 'Wood Pickaxe', type: 'pickaxe', tier: 'wood', isItem: true, stackable: false },
+        STONE_PICKAXE: { id: 101, name: 'Stone Pickaxe', type: 'pickaxe', tier: 'stone', isItem: true, stackable: false },
+        IRON_PICKAXE: { id: 102, name: 'Iron Pickaxe', type: 'pickaxe', tier: 'iron', isItem: true, stackable: false },
+        DIAMOND_PICKAXE: { id: 103, name: 'Diamond Pickaxe', type: 'pickaxe', tier: 'diamond', isItem: true, stackable: false },
         // Axes - for wood
-        WOOD_AXE: { id: 110, name: 'Wood Axe', type: 'axe', tier: 'wood', isItem: true },
-        STONE_AXE: { id: 111, name: 'Stone Axe', type: 'axe', tier: 'stone', isItem: true },
-        IRON_AXE: { id: 112, name: 'Iron Axe', type: 'axe', tier: 'iron', isItem: true },
-        DIAMOND_AXE: { id: 113, name: 'Diamond Axe', type: 'axe', tier: 'diamond', isItem: true },
+        WOOD_AXE: { id: 110, name: 'Wood Axe', type: 'axe', tier: 'wood', isItem: true, stackable: false },
+        STONE_AXE: { id: 111, name: 'Stone Axe', type: 'axe', tier: 'stone', isItem: true, stackable: false },
+        IRON_AXE: { id: 112, name: 'Iron Axe', type: 'axe', tier: 'iron', isItem: true, stackable: false },
+        DIAMOND_AXE: { id: 113, name: 'Diamond Axe', type: 'axe', tier: 'diamond', isItem: true, stackable: false },
         // Shovels - for dirt, sand
-        WOOD_SHOVEL: { id: 120, name: 'Wood Shovel', type: 'shovel', tier: 'wood', isItem: true },
-        STONE_SHOVEL: { id: 121, name: 'Stone Shovel', type: 'shovel', tier: 'stone', isItem: true },
-        IRON_SHOVEL: { id: 122, name: 'Iron Shovel', type: 'shovel', tier: 'iron', isItem: true },
-        DIAMOND_SHOVEL: { id: 123, name: 'Diamond Shovel', type: 'shovel', tier: 'diamond', isItem: true },
+        WOOD_SHOVEL: { id: 120, name: 'Wood Shovel', type: 'shovel', tier: 'wood', isItem: true, stackable: false },
+        STONE_SHOVEL: { id: 121, name: 'Stone Shovel', type: 'shovel', tier: 'stone', isItem: true, stackable: false },
+        IRON_SHOVEL: { id: 122, name: 'Iron Shovel', type: 'shovel', tier: 'iron', isItem: true, stackable: false },
+        DIAMOND_SHOVEL: { id: 123, name: 'Diamond Shovel', type: 'shovel', tier: 'diamond', isItem: true, stackable: false },
     };
 
     // Create ID to tool mapping
@@ -1756,10 +1759,11 @@
             return getItemById(slot.itemId);
         }
 
-        // Get held tool (if any)
+        // Get held tool (if any) - only returns actual tools, not materials
         getHeldTool() {
-            const item = this.getHeldItem();
-            return (item && item.isItem) ? item : null;
+            const slot = this.inventory[this.selectedSlot];
+            if (!slot) return null;
+            return TOOL_BY_ID[slot.itemId] || null;
         }
 
         // Calculate mining speed multiplier based on tool
@@ -1839,12 +1843,13 @@
         }
 
         addToInventory(item, count = 1) {
-            // Tools don't stack (count = 1 always for tools)
-            const isTool = item.isItem;
-            const maxStack = isTool ? 1 : 64;
+            // Items stack if they have stackable: true (or undefined for blocks which default to stackable)
+            // Tools explicitly have stackable: false
+            const canStack = item.stackable !== false;
+            const maxStack = canStack ? 64 : 1;
 
-            // Try to stack with existing (only for non-tools)
-            if (!isTool) {
+            // Try to stack with existing (only for stackable items)
+            if (canStack) {
                 for (let i = 0; i < this.inventory.length; i++) {
                     if (this.inventory[i] && this.inventory[i].itemId === item.id) {
                         this.inventory[i].count = Math.min(maxStack, this.inventory[i].count + count);
@@ -1881,16 +1886,19 @@
             return item;
         }
 
-        update(world, keys) {
+        update(world, keys, dt) {
             if (this.isDead) return 0;
 
-            // Horizontal movement
-            const moveSpeed = CONFIG.MOVE_SPEED;
+            // Clamp dt to prevent huge physics jumps after tab switch
+            const clampedDt = Math.min(dt, CONFIG.MAX_DT);
+            const dtSeconds = clampedDt / 1000;
+
+            // Horizontal movement (instant velocity, not acceleration-based)
             if (keys.left) {
-                this.vx = -moveSpeed;
+                this.vx = -CONFIG.MOVE_SPEED;
                 this.facingRight = false;
             } else if (keys.right) {
-                this.vx = moveSpeed;
+                this.vx = CONFIG.MOVE_SPEED;
                 this.facingRight = true;
             } else {
                 this.vx = 0;
@@ -1915,13 +1923,14 @@
                 }
             }
 
-            // Gravity
-            this.vy += CONFIG.GRAVITY;
-            if (this.vy > 15) this.vy = 15; // Terminal velocity
+            // Gravity (acceleration in blocks/second²)
+            this.vy += CONFIG.GRAVITY * dtSeconds;
+            if (this.vy > CONFIG.TERMINAL_VELOCITY) this.vy = CONFIG.TERMINAL_VELOCITY;
 
-            // Move with collision detection
-            this.moveWithCollision(world, this.vx * 0.1, 0);
-            this.moveWithCollision(world, 0, this.vy * 0.1);
+            // Move with collision detection (dt-based displacement)
+            const dx = this.vx * dtSeconds;
+            const dy = this.vy * dtSeconds;
+            this.moveWithCollision(world, dx, dy);
 
             // Calculate fall damage on landing
             let fallDamage = 0;
@@ -2086,13 +2095,18 @@
                 if (Math.abs(this.knockbackX) < 0.1) this.knockbackX = 0;
             }
 
-            // Gravity
-            this.vy += CONFIG.GRAVITY;
-            if (this.vy > 15) this.vy = 15;
+            // Clamp dt for physics (same as player)
+            const clampedDt = Math.min(dt, CONFIG.MAX_DT);
+            const physDtSeconds = clampedDt / 1000;
 
-            // Move with collision
-            this.moveWithCollision(world, this.vx * 0.1, 0);
-            this.moveWithCollision(world, 0, this.vy * 0.1);
+            // Gravity (dt-based)
+            this.vy += CONFIG.GRAVITY * physDtSeconds;
+            if (this.vy > CONFIG.TERMINAL_VELOCITY) this.vy = CONFIG.TERMINAL_VELOCITY;
+
+            // Move with collision (dt-based)
+            const dx = this.vx * physDtSeconds;
+            const dy = this.vy * physDtSeconds;
+            this.moveWithCollision(world, dx, dy);
 
             // Check contact with player for damage
             if (this.attackCooldown <= 0 && this.targetPlayer && !this.targetPlayer.isDead) {
@@ -2768,10 +2782,11 @@
 
             // Check if result fits
             let canFit = false;
-            const maxStack = result.isItem ? 1 : 64;
+            const canStack = result.stackable !== false;
+            const maxStack = canStack ? 64 : 1;
 
             // Try to stack with existing
-            if (!result.isItem) {
+            if (canStack) {
                 for (const slot of testPlayer.inventory) {
                     if (slot && slot.itemId === result.id && slot.count + resultCount <= maxStack) {
                         canFit = true;
@@ -3313,7 +3328,7 @@
             }
 
             // Update player and check for fall damage
-            const fallDamage = this.player.update(this.world, this.keys);
+            const fallDamage = this.player.update(this.world, this.keys, dt);
 
             // Update swing animation
             this.player.updateSwing(dt);
