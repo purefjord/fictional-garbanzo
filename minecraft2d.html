@@ -18,244 +18,49 @@
             display: block;
             cursor: crosshair;
         }
-        #ui {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 4px;
-            padding: 8px;
-            background: rgba(0,0,0,0.5);
-            border-radius: 8px;
-            border: 2px solid #555;
-        }
-        .slot {
-            width: 50px;
-            height: 50px;
-            background: rgba(139,139,139,0.8);
-            border: 2px solid #373737;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            cursor: pointer;
-        }
-        .slot.selected {
-            border-color: #fff;
-            box-shadow: 0 0 10px rgba(255,255,255,0.5);
-        }
-        .slot-count {
-            position: absolute;
-            bottom: 2px;
-            right: 4px;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
-            text-shadow: 1px 1px 2px black;
-        }
-        .slot-key {
-            position: absolute;
-            top: 2px;
-            left: 4px;
-            color: #aaa;
-            font-size: 10px;
-        }
-        #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            font-size: 14px;
-            text-shadow: 1px 1px 2px black;
-            background: rgba(0,0,0,0.3);
-            padding: 10px;
-            border-radius: 5px;
-        }
-        #crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 20px;
-            height: 20px;
-            pointer-events: none;
-        }
-        #crosshair::before, #crosshair::after {
-            content: '';
-            position: absolute;
-            background: rgba(255,255,255,0.8);
-        }
-        #crosshair::before {
-            width: 2px; height: 20px;
-            left: 9px; top: 0;
-        }
-        #crosshair::after {
-            width: 20px; height: 2px;
-            left: 0; top: 9px;
-        }
-        #controls {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            color: white;
-            font-size: 12px;
-            text-shadow: 1px 1px 2px black;
-            background: rgba(0,0,0,0.3);
-            padding: 10px;
-            border-radius: 5px;
-            max-width: 200px;
-        }
-        #miningProgress {
-            position: absolute;
-            width: 40px;
-            height: 6px;
-            background: rgba(0,0,0,0.5);
-            border-radius: 3px;
-            display: none;
-        }
-        #miningProgress .fill {
-            height: 100%;
-            background: #4CAF50;
-            border-radius: 3px;
-            transition: width 0.05s;
-        }
+        #ui { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 8px; background: rgba(0,0,0,0.5); border-radius: 8px; border: 2px solid #555; }
+        .slot { width: 50px; height: 50px; background: rgba(139,139,139,0.8); border: 2px solid #373737; border-radius: 4px; display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; }
+        .slot.selected { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        .slot-count { position: absolute; bottom: 2px; right: 4px; color: white; font-size: 12px; font-weight: bold; text-shadow: 1px 1px 2px black; }
+        .slot-key { position: absolute; top: 2px; left: 4px; color: #aaa; font-size: 10px; }
+        .panel { position: absolute; color: white; text-shadow: 1px 1px 2px black; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; }
+        #info { top: 10px; left: 10px; font-size: 14px; }
+        #controls { top: 10px; right: 10px; font-size: 12px; max-width: 200px; }
+        #miningProgress { position: absolute; width: 40px; height: 6px; background: rgba(0,0,0,0.5); border-radius: 3px; display: none; }
+        #miningProgress .fill { height: 100%; background: #4CAF50; border-radius: 3px; transition: width 0.05s; }
 
         /* Mobile Touch Controls */
-        #touchControls {
-            display: none;
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            pointer-events: none;
-            z-index: 100;
-        }
-        .touch-visible #touchControls {
-            display: block;
-        }
-        .touch-visible #controls {
-            display: none;
-        }
-        .touch-visible #ui {
-            bottom: 140px;
-        }
-        .touch-btn {
-            position: absolute;
-            width: 60px;
-            height: 60px;
-            background: rgba(255,255,255,0.25);
-            border: 3px solid rgba(255,255,255,0.4);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            color: white;
-            text-shadow: 1px 1px 3px black;
-            pointer-events: all;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: none;
-            transition: background 0.1s, transform 0.1s;
-        }
-        .touch-btn:active, .touch-btn.active {
-            background: rgba(255,255,255,0.5);
-            transform: scale(0.95);
-        }
+        #touchControls { display: none; position: fixed; bottom: 0; left: 0; right: 0; pointer-events: none; z-index: 100; }
+        .touch-visible #touchControls { display: block; }
+        .touch-visible #controls { display: none; }
+        .touch-visible #ui { bottom: 140px; }
+        .touch-btn { position: absolute; width: 60px; height: 60px; background: rgba(255,255,255,0.25); border: 3px solid rgba(255,255,255,0.4); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; color: white; text-shadow: 1px 1px 3px black; pointer-events: all; user-select: none; -webkit-user-select: none; touch-action: none; transition: background 0.1s, transform 0.1s; }
+        .touch-btn:active, .touch-btn.active { background: rgba(255,255,255,0.5); transform: scale(0.95); }
         .touch-btn.left-btn { bottom: 20px; left: 20px; }
         .touch-btn.right-btn { bottom: 20px; left: 100px; }
         .touch-btn.jump-btn { bottom: 20px; right: 20px; }
-        .touch-btn.mode-btn {
-            bottom: 100px;
-            right: 20px;
-            width: 50px;
-            height: 50px;
-            font-size: 20px;
-        }
-        .touch-btn.mode-btn.place-mode {
-            background: rgba(100,200,100,0.4);
-            border-color: rgba(100,255,100,0.6);
-        }
-        #modeLabel {
-            position: absolute;
-            bottom: 160px;
-            right: 15px;
-            color: white;
-            font-size: 12px;
-            text-shadow: 1px 1px 2px black;
-            text-align: center;
-            width: 60px;
-            pointer-events: none;
-        }
-        /* Touch crosshair for aiming */
-        #touchCrosshair {
-            position: absolute;
-            width: 40px;
-            height: 40px;
-            border: 2px solid rgba(255,255,255,0.7);
-            border-radius: 4px;
-            pointer-events: none;
-            display: none;
-            z-index: 50;
-        }
-        #touchCrosshair::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 6px;
-            height: 6px;
-            background: rgba(255,255,255,0.9);
-            border-radius: 50%;
-        }
-        .touch-visible #touchCrosshair {
-            display: block;
-        }
-        /* Larger slots on mobile */
-        .touch-visible .slot {
-            width: 40px;
-            height: 40px;
-        }
-        .touch-visible .slot-key {
-            display: none;
-        }
-        .touch-visible #info {
-            font-size: 12px;
-            padding: 6px;
-        }
-        #saveNotification {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.8);
-            color: #4CAF50;
-            padding: 15px 30px;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: bold;
-            z-index: 1000;
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none;
-        }
-        #saveNotification.show {
-            opacity: 1;
-        }
+        .touch-btn.mode-btn { bottom: 100px; right: 20px; width: 50px; height: 50px; font-size: 20px; }
+        .touch-btn.mode-btn.place-mode { background: rgba(100,200,100,0.4); border-color: rgba(100,255,100,0.6); }
+        #modeLabel { position: absolute; bottom: 160px; right: 15px; color: white; font-size: 12px; text-shadow: 1px 1px 2px black; text-align: center; width: 60px; pointer-events: none; }
+        #touchCrosshair { position: absolute; width: 40px; height: 40px; border: 2px solid rgba(255,255,255,0.7); border-radius: 4px; pointer-events: none; display: none; z-index: 50; }
+        #touchCrosshair::before { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 6px; height: 6px; background: rgba(255,255,255,0.9); border-radius: 50%; }
+        .touch-visible #touchCrosshair { display: block; }
+        .touch-visible .slot { width: 40px; height: 40px; }
+        .touch-visible .slot-key { display: none; }
+        .touch-visible #info { font-size: 12px; padding: 6px; }
+        #saveNotification { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: #4CAF50; padding: 15px 30px; border-radius: 8px; font-size: 18px; font-weight: bold; z-index: 1000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        #saveNotification.show { opacity: 1; }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
     <div id="ui"></div>
-    <div id="info">
+    <div id="info" class="panel">
         <div>FPS: <span id="fps">0</span></div>
         <div>Position: <span id="position">0, 0</span></div>
         <div>Time: <span id="timeDisplay">Day</span></div>
     </div>
-    <div id="controls">
+    <div id="controls" class="panel">
         <strong>Controls:</strong><br>
         WASD / Arrows - Move<br>
         Space - Jump<br>
@@ -510,73 +315,30 @@
         },
 
         drawDirt(ctx, size) {
-            ctx.fillStyle = '#8B5A2B';
-            ctx.fillRect(0, 0, size, size);
-            this.addNoise(ctx, size, '#6B4226', 0.4);
-            this.addNoise(ctx, size, '#9B6A3B', 0.2);
-
-            // Small rocks
-            ctx.fillStyle = '#5a4020';
-            for (let i = 0; i < 4; i++) {
-                const x = Math.random() * size;
-                const y = Math.random() * size;
-                ctx.beginPath();
-                ctx.arc(x, y, 1 + Math.random() * 2, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            this.drawNoiseTexture(ctx, size, '#8B5A2B', ['#6B4226', '#9B6A3B'], [0.4, 0.2]);
+            this.drawSpots(ctx, size, '#5a4020', 4, 2);
         },
 
         drawStone(ctx, size) {
-            ctx.fillStyle = '#808080';
-            ctx.fillRect(0, 0, size, size);
-            this.addNoise(ctx, size, '#666666', 0.3);
-            this.addNoise(ctx, size, '#999999', 0.2);
-
-            // Cracks
-            ctx.strokeStyle = '#555';
-            ctx.lineWidth = 1;
-            for (let i = 0; i < 2; i++) {
-                ctx.beginPath();
-                ctx.moveTo(Math.random() * size, Math.random() * size);
-                ctx.lineTo(Math.random() * size, Math.random() * size);
-                ctx.stroke();
-            }
+            this.drawNoiseTexture(ctx, size, '#808080', ['#666666', '#999999'], [0.3, 0.2]);
+            this.drawCracks(ctx, size, '#555', 2);
         },
 
         drawCobblestone(ctx, size) {
             ctx.fillStyle = '#6a6a6a';
             ctx.fillRect(0, 0, size, size);
-
-            // Irregular stones
-            const stones = [
-                [0, 0, size*0.5, size*0.45],
-                [size*0.5, 0, size*0.5, size*0.5],
-                [0, size*0.45, size*0.6, size*0.55],
-                [size*0.55, size*0.5, size*0.45, size*0.5]
-            ];
-
-            stones.forEach(([x, y, w, h], i) => {
+            [[0, 0, 0.5, 0.45], [0.5, 0, 0.5, 0.5], [0, 0.45, 0.6, 0.55], [0.55, 0.5, 0.45, 0.5]].forEach(([x, y, w, h], i) => {
                 ctx.fillStyle = i % 2 ? '#7a7a7a' : '#5a5a5a';
-                ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+                ctx.fillRect(x * size + 1, y * size + 1, w * size - 2, h * size - 2);
             });
         },
 
         drawWood(ctx, size) {
             ctx.fillStyle = '#6B4423';
             ctx.fillRect(0, 0, size, size);
-
-            // Bark lines
             ctx.strokeStyle = '#4a3020';
             ctx.lineWidth = 2;
-            for (let i = 0; i < 5; i++) {
-                const x = i * (size / 4) + Math.random() * 4;
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x + (Math.random() - 0.5) * 4, size);
-                ctx.stroke();
-            }
-
-            // Rings hint
+            for (let i = 0; i < 5; i++) { const x = i * size / 4 + Math.random() * 4; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + (Math.random() - 0.5) * 4, size); ctx.stroke(); }
             ctx.fillStyle = '#5a3818';
             ctx.beginPath();
             ctx.ellipse(size/2, size/2, size*0.3, size*0.35, 0, 0, Math.PI * 2);
@@ -586,32 +348,16 @@
         drawLeaves(ctx, size) {
             ctx.fillStyle = '#228B22';
             ctx.fillRect(0, 0, size, size);
-
-            // Leaf clusters
             for (let i = 0; i < 15; i++) {
                 ctx.fillStyle = Math.random() > 0.5 ? '#32CD32' : '#1e7b1e';
-                const x = Math.random() * size;
-                const y = Math.random() * size;
                 ctx.beginPath();
-                ctx.arc(x, y, 2 + Math.random() * 3, 0, Math.PI * 2);
+                ctx.arc(Math.random() * size, Math.random() * size, 2 + Math.random() * 3, 0, Math.PI * 2);
                 ctx.fill();
             }
         },
 
         drawSand(ctx, size) {
-            ctx.fillStyle = '#e6d59e';
-            ctx.fillRect(0, 0, size, size);
-            this.addNoise(ctx, size, '#d4c48a', 0.3);
-
-            // Sand grains
-            ctx.fillStyle = '#c4b47a';
-            for (let i = 0; i < 20; i++) {
-                ctx.fillRect(
-                    Math.random() * size,
-                    Math.random() * size,
-                    1, 1
-                );
-            }
+            this.drawNoiseTexture(ctx, size, '#e6d59e', ['#d4c48a', '#c4b47a'], [0.3, 0.2]);
         },
 
         drawWater(ctx, size) {
@@ -620,91 +366,45 @@
             gradient.addColorStop(1, 'rgba(0, 100, 180, 0.7)');
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, size, size);
-
-            // Wave highlights
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.lineWidth = 1;
-            for (let i = 0; i < 3; i++) {
-                ctx.beginPath();
-                ctx.moveTo(0, size * 0.3 * (i + 1));
-                ctx.quadraticCurveTo(size/2, size * 0.3 * (i + 1) - 5, size, size * 0.3 * (i + 1));
-                ctx.stroke();
-            }
+            for (let i = 1; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(0, size * 0.3 * i); ctx.quadraticCurveTo(size/2, size * 0.3 * i - 5, size, size * 0.3 * i); ctx.stroke(); }
         },
 
         drawOre(ctx, size, oreColor) {
-            // Stone base
             this.drawStone(ctx, size);
-
-            // Ore deposits
             ctx.fillStyle = oreColor;
-            const deposits = 3 + Math.floor(Math.random() * 3);
-            for (let i = 0; i < deposits; i++) {
-                const x = 4 + Math.random() * (size - 8);
-                const y = 4 + Math.random() * (size - 8);
-                const s = 3 + Math.random() * 4;
-
-                ctx.beginPath();
-                ctx.moveTo(x, y - s);
-                ctx.lineTo(x + s, y);
-                ctx.lineTo(x, y + s);
-                ctx.lineTo(x - s, y);
-                ctx.closePath();
-                ctx.fill();
+            for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
+                const x = 4 + Math.random() * (size - 8), y = 4 + Math.random() * (size - 8), s = 3 + Math.random() * 4;
+                ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y); ctx.closePath(); ctx.fill();
             }
         },
 
         drawBedrock(ctx, size) {
             ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(0, 0, size, size);
-
-            // Chaotic pattern
             for (let i = 0; i < 20; i++) {
                 ctx.fillStyle = Math.random() > 0.5 ? '#333' : '#0a0a0a';
-                ctx.fillRect(
-                    Math.random() * size,
-                    Math.random() * size,
-                    3 + Math.random() * 6,
-                    3 + Math.random() * 6
-                );
+                ctx.fillRect(Math.random() * size, Math.random() * size, 3 + Math.random() * 6, 3 + Math.random() * 6);
             }
         },
 
         drawPlanks(ctx, size) {
             ctx.fillStyle = '#ba8c51';
             ctx.fillRect(0, 0, size, size);
-
-            // Horizontal planks
             ctx.strokeStyle = '#8a5c31';
             ctx.lineWidth = 1;
-            for (let i = 0; i < 4; i++) {
-                const y = i * (size / 4) + size / 8;
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(size, y);
-                ctx.stroke();
-            }
-
-            // Wood grain
+            for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(0, i * size / 4 + size / 8); ctx.lineTo(size, i * size / 4 + size / 8); ctx.stroke(); }
             ctx.strokeStyle = 'rgba(100, 60, 20, 0.3)';
-            for (let i = 0; i < 8; i++) {
-                ctx.beginPath();
-                ctx.moveTo(Math.random() * size, 0);
-                ctx.lineTo(Math.random() * size, size);
-                ctx.stroke();
-            }
+            for (let i = 0; i < 8; i++) { ctx.beginPath(); ctx.moveTo(Math.random() * size, 0); ctx.lineTo(Math.random() * size, size); ctx.stroke(); }
         },
 
         drawGlass(ctx, size) {
             ctx.fillStyle = 'rgba(200, 230, 255, 0.4)';
             ctx.fillRect(0, 0, size, size);
-
-            // Frame
             ctx.strokeStyle = 'rgba(180, 210, 235, 0.8)';
             ctx.lineWidth = 2;
             ctx.strokeRect(1, 1, size - 2, size - 2);
-
-            // Shine
             ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.beginPath();
             ctx.moveTo(2, 2);
@@ -717,11 +417,33 @@
         addNoise(ctx, size, color, intensity) {
             ctx.fillStyle = color;
             for (let i = 0; i < size * size * intensity; i++) {
-                ctx.fillRect(
-                    Math.floor(Math.random() * size),
-                    Math.floor(Math.random() * size),
-                    1, 1
-                );
+                ctx.fillRect(Math.floor(Math.random() * size), Math.floor(Math.random() * size), 1, 1);
+            }
+        },
+
+        drawNoiseTexture(ctx, size, base, colors, intensities) {
+            ctx.fillStyle = base;
+            ctx.fillRect(0, 0, size, size);
+            colors.forEach((c, i) => this.addNoise(ctx, size, c, intensities[i]));
+        },
+
+        drawSpots(ctx, size, color, count, maxRadius) {
+            ctx.fillStyle = color;
+            for (let i = 0; i < count; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random() * size, Math.random() * size, 1 + Math.random() * maxRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        },
+
+        drawCracks(ctx, size, color, count) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            for (let i = 0; i < count; i++) {
+                ctx.beginPath();
+                ctx.moveTo(Math.random() * size, Math.random() * size);
+                ctx.lineTo(Math.random() * size, Math.random() * size);
+                ctx.stroke();
             }
         }
     };
@@ -833,27 +555,16 @@
 
             // Stone with ores
             const depth = y - surfaceHeight;
-
-            // Diamond (deep)
-            if (depth > 100 && this.oreNoise.noise2D(x * 0.1, y * 0.1) > 0.85) {
-                return BLOCKS.DIAMOND_ORE.id;
+            const ores = [
+                [BLOCKS.DIAMOND_ORE, 100, Infinity, 0.1, 0, 0.85],
+                [BLOCKS.GOLD_ORE, 60, Infinity, 0.15, 100, 0.8],
+                [BLOCKS.IRON_ORE, 20, Infinity, 0.12, 200, 0.75],
+                [BLOCKS.COAL_ORE, 5, 80, 0.08, 300, 0.7],
+            ];
+            for (const [block, min, max, scale, offset, threshold] of ores) {
+                if (depth > min && depth < max && this.oreNoise.noise2D(x * scale + offset, y * scale) > threshold)
+                    return block.id;
             }
-
-            // Gold (medium-deep)
-            if (depth > 60 && this.oreNoise.noise2D(x * 0.15 + 100, y * 0.15) > 0.8) {
-                return BLOCKS.GOLD_ORE.id;
-            }
-
-            // Iron (everywhere below surface)
-            if (depth > 20 && this.oreNoise.noise2D(x * 0.12 + 200, y * 0.12) > 0.75) {
-                return BLOCKS.IRON_ORE.id;
-            }
-
-            // Coal (shallow to medium)
-            if (depth > 5 && depth < 80 && this.oreNoise.noise2D(x * 0.08 + 300, y * 0.08) > 0.7) {
-                return BLOCKS.COAL_ORE.id;
-            }
-
             return BLOCKS.STONE.id;
         }
 
@@ -1163,58 +874,29 @@
         }
 
         setupInput() {
+            const keyMap = {
+                KeyA: 'left', ArrowLeft: 'left',
+                KeyD: 'right', ArrowRight: 'right',
+                KeyW: 'jump', ArrowUp: 'jump', Space: 'jump'
+            };
+
             document.addEventListener('keydown', (e) => {
-                switch(e.code) {
-                    case 'KeyA':
-                    case 'ArrowLeft':
-                        this.keys.left = true;
-                        break;
-                    case 'KeyD':
-                    case 'ArrowRight':
-                        this.keys.right = true;
-                        break;
-                    case 'KeyW':
-                    case 'ArrowUp':
-                    case 'Space':
-                        this.keys.jump = true;
-                        e.preventDefault();
-                        break;
-                    case 'Digit1': case 'Digit2': case 'Digit3':
-                    case 'Digit4': case 'Digit5': case 'Digit6':
-                    case 'Digit7': case 'Digit8': case 'Digit9':
-                        this.player.selectedSlot = parseInt(e.code.slice(-1)) - 1;
-                        this.updateUI();
-                        break;
-                    case 'KeyP':
-                        // Manual save
-                        this.saveGame();
-                        break;
-                    case 'KeyN':
-                        // New game (delete save and reload)
-                        if (confirm('Start a new game? Your current progress will be lost.')) {
-                            this.deleteSave();
-                            location.reload();
-                        }
-                        break;
+                if (keyMap[e.code]) {
+                    this.keys[keyMap[e.code]] = true;
+                    if (e.code === 'Space') e.preventDefault();
+                } else if (e.code.startsWith('Digit')) {
+                    this.player.selectedSlot = parseInt(e.code.slice(-1)) - 1;
+                    this.updateUI();
+                } else if (e.code === 'KeyP') {
+                    this.saveGame();
+                } else if (e.code === 'KeyN' && confirm('Start a new game? Your current progress will be lost.')) {
+                    this.deleteSave();
+                    location.reload();
                 }
             });
 
             document.addEventListener('keyup', (e) => {
-                switch(e.code) {
-                    case 'KeyA':
-                    case 'ArrowLeft':
-                        this.keys.left = false;
-                        break;
-                    case 'KeyD':
-                    case 'ArrowRight':
-                        this.keys.right = false;
-                        break;
-                    case 'KeyW':
-                    case 'ArrowUp':
-                    case 'Space':
-                        this.keys.jump = false;
-                        break;
-                }
+                if (keyMap[e.code]) this.keys[keyMap[e.code]] = false;
             });
 
             this.canvas.addEventListener('mousemove', (e) => {
@@ -1263,41 +945,24 @@
             this.canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
             // Handle button touches
+            const setKey = (action, val) => { if (action in this.keys) this.keys[action] = val; };
             buttons.forEach(btn => {
                 const action = btn.dataset.action;
-
                 btn.addEventListener('touchstart', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     btn.classList.add('active');
-
-                    if (action === 'left') this.keys.left = true;
-                    else if (action === 'right') this.keys.right = true;
-                    else if (action === 'jump') this.keys.jump = true;
-                    else if (action === 'mode') {
-                        // Toggle mine/place mode
+                    setKey(action, true);
+                    if (action === 'mode') {
                         this.touchMode = this.touchMode === 'mine' ? 'place' : 'mine';
                         modeLabel.textContent = this.touchMode === 'mine' ? 'Mine' : 'Place';
                         modeBtn.textContent = this.touchMode === 'mine' ? '\u26CF' : '\u25A3';
                         modeBtn.classList.toggle('place-mode', this.touchMode === 'place');
                     }
                 }, { passive: false });
-
-                btn.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    btn.classList.remove('active');
-
-                    if (action === 'left') this.keys.left = false;
-                    else if (action === 'right') this.keys.right = false;
-                    else if (action === 'jump') this.keys.jump = false;
-                }, { passive: false });
-
-                btn.addEventListener('touchcancel', (e) => {
-                    btn.classList.remove('active');
-                    if (action === 'left') this.keys.left = false;
-                    else if (action === 'right') this.keys.right = false;
-                    else if (action === 'jump') this.keys.jump = false;
-                });
+                const endTouch = () => { btn.classList.remove('active'); setKey(action, false); };
+                btn.addEventListener('touchend', (e) => { e.preventDefault(); endTouch(); }, { passive: false });
+                btn.addEventListener('touchcancel', endTouch);
             });
 
             // Handle canvas touch for mining/placing
@@ -1634,73 +1299,46 @@
         renderSky() {
             const ctx = this.ctx;
             const hour = this.dayProgress * 24;
+            const isDay = hour >= 6 && hour < 18;
 
-            let skyTop, skyBottom;
-
-            if (hour >= 6 && hour < 8) {
-                // Sunrise
-                const t = (hour - 6) / 2;
-                skyTop = this.lerpColor('#1a1a3e', '#87CEEB', t);
-                skyBottom = this.lerpColor('#4a3060', '#e0f0ff', t);
-            } else if (hour >= 8 && hour < 17) {
-                // Day
-                skyTop = '#87CEEB';
-                skyBottom = '#e0f0ff';
-            } else if (hour >= 17 && hour < 20) {
-                // Sunset
-                const t = (hour - 17) / 3;
-                skyTop = this.lerpColor('#87CEEB', '#1a1a3e', t);
-                skyBottom = this.lerpColor('#e0f0ff', '#4a3060', t);
-            } else {
-                // Night
-                skyTop = '#0a0a1e';
-                skyBottom = '#1a1a3e';
-            }
-
+            // Sky colors: [hour, topColor, bottomColor]
+            const getSkyColors = () => {
+                if (hour < 6) return ['#0a0a1e', '#1a1a3e'];
+                if (hour < 8) { const t = (hour - 6) / 2; return [this.lerpColor('#1a1a3e', '#87CEEB', t), this.lerpColor('#4a3060', '#e0f0ff', t)]; }
+                if (hour < 17) return ['#87CEEB', '#e0f0ff'];
+                if (hour < 20) { const t = (hour - 17) / 3; return [this.lerpColor('#87CEEB', '#1a1a3e', t), this.lerpColor('#e0f0ff', '#4a3060', t)]; }
+                return ['#0a0a1e', '#1a1a3e'];
+            };
+            const [skyTop, skyBottom] = getSkyColors();
             const gradient = ctx.createLinearGradient(0, 0, 0, this.canvas.height);
             gradient.addColorStop(0, skyTop);
             gradient.addColorStop(1, skyBottom);
-
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
             // Stars at night
-            if (hour < 6 || hour >= 20) {
+            if (!isDay && hour >= 20 || hour < 6) {
                 ctx.fillStyle = 'white';
                 const starSeed = Math.floor(this.cameraX / 100);
                 for (let i = 0; i < 100; i++) {
-                    const sx = ((i * 7919 + starSeed * 104729) % 1000) / 1000 * this.canvas.width;
-                    const sy = ((i * 7901 + starSeed * 104723) % 1000) / 1000 * this.canvas.height * 0.6;
-                    const size = ((i * 7907) % 3) + 1;
                     ctx.beginPath();
-                    ctx.arc(sx, sy, size, 0, Math.PI * 2);
+                    ctx.arc(((i * 7919 + starSeed * 104729) % 1000) / 1000 * this.canvas.width,
+                            ((i * 7901 + starSeed * 104723) % 1000) / 1000 * this.canvas.height * 0.6,
+                            ((i * 7907) % 3) + 1, 0, Math.PI * 2);
                     ctx.fill();
                 }
             }
 
             // Sun/Moon
-            const celestialX = this.canvas.width * (0.2 + this.dayProgress * 0.6);
-            const celestialY = this.canvas.height * 0.2 + Math.sin(this.dayProgress * Math.PI) * this.canvas.height * 0.15;
-
-            if (hour >= 6 && hour < 18) {
-                // Sun
-                ctx.fillStyle = '#fff5b5';
-                ctx.shadowColor = '#ffdd00';
-                ctx.shadowBlur = 30;
-                ctx.beginPath();
-                ctx.arc(celestialX, celestialY, 40, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.shadowBlur = 0;
-            } else {
-                // Moon
-                ctx.fillStyle = '#e8e8e8';
-                ctx.shadowColor = '#ccccff';
-                ctx.shadowBlur = 20;
-                ctx.beginPath();
-                ctx.arc(celestialX, celestialY, 30, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.shadowBlur = 0;
-            }
+            const cx = this.canvas.width * (0.2 + this.dayProgress * 0.6);
+            const cy = this.canvas.height * 0.2 + Math.sin(this.dayProgress * Math.PI) * this.canvas.height * 0.15;
+            ctx.fillStyle = isDay ? '#fff5b5' : '#e8e8e8';
+            ctx.shadowColor = isDay ? '#ffdd00' : '#ccccff';
+            ctx.shadowBlur = isDay ? 30 : 20;
+            ctx.beginPath();
+            ctx.arc(cx, cy, isDay ? 40 : 30, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
         }
 
         renderPlayer() {
