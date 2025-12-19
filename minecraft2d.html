@@ -3071,12 +3071,8 @@
                     e.preventDefault();
                     e.stopPropagation();
                     btn.classList.add('active');
-
-                    if (action === 'left') this.keys.left = true;
-                    else if (action === 'right') this.keys.right = true;
-                    else if (action === 'jump') this.keys.jump = true;
+                    if (action in this.keys) this.keys[action] = true;
                     else if (action === 'mode') {
-                        // Toggle mine/place mode
                         this.touchMode = this.touchMode === 'mine' ? 'place' : 'mine';
                         modeLabel.textContent = this.touchMode === 'mine' ? 'Mine' : 'Place';
                         modeBtn.textContent = this.touchMode === 'mine' ? '\u26CF' : '\u25A3';
@@ -3087,17 +3083,12 @@
                 btn.addEventListener('touchend', (e) => {
                     e.preventDefault();
                     btn.classList.remove('active');
-
-                    if (action === 'left') this.keys.left = false;
-                    else if (action === 'right') this.keys.right = false;
-                    else if (action === 'jump') this.keys.jump = false;
+                    if (action in this.keys) this.keys[action] = false;
                 }, { passive: false });
 
                 btn.addEventListener('touchcancel', (e) => {
                     btn.classList.remove('active');
-                    if (action === 'left') this.keys.left = false;
-                    else if (action === 'right') this.keys.right = false;
-                    else if (action === 'jump') this.keys.jump = false;
+                    if (action in this.keys) this.keys[action] = false;
                 });
             });
 
