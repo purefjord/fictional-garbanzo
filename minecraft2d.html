@@ -586,12 +586,81 @@
             text-align: center;
             margin-top: 2px;
         }
+        /* Debug Panel */
+        #debugPanel {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.85);
+            border: 2px solid #555;
+            border-radius: 8px;
+            padding: 15px;
+            z-index: 900;
+            display: none;
+            min-width: 300px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        #debugPanel.show { display: block; }
+        #debugPanel h3 {
+            color: #fff;
+            margin: 0 0 10px 0;
+            text-align: center;
+            font-size: 16px;
+        }
+        .debug-section {
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #444;
+        }
+        .debug-section:last-child { border-bottom: none; }
+        .debug-section-title {
+            color: #aaa;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .debug-row {
+            display: flex;
+            align-items: center;
+            margin: 6px 0;
+            gap: 10px;
+        }
+        .debug-row label {
+            color: #ddd;
+            font-size: 12px;
+            min-width: 100px;
+        }
+        .debug-row input[type="range"] {
+            flex: 1;
+            height: 6px;
+            cursor: pointer;
+        }
+        .debug-row .debug-value {
+            color: #4af;
+            font-size: 12px;
+            min-width: 50px;
+            text-align: right;
+            font-family: monospace;
+        }
+        .debug-hint {
+            color: #666;
+            font-size: 10px;
+            text-align: center;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
     <div id="healthBar"></div>
     <div id="damageOverlay"></div>
+    <div id="debugPanel">
+        <h3>Debug Panel (F3)</h3>
+        <div id="debugContent"></div>
+        <div class="debug-hint">Press F3 to close</div>
+    </div>
     <div id="deathScreen">
         <h1>You Died!</h1>
         <button id="respawnBtn">Respawn</button>
@@ -611,7 +680,8 @@
         1-9 - Select hotbar<br>
         E - Crafting menu<br>
         P - Save game<br>
-        N - New game
+        N - New game<br>
+        F3 - Debug panel
     </div>
     <div id="miningProgress"><div class="fill"></div></div>
     <div id="saveNotification">Game Saved</div>
@@ -690,6 +760,16 @@
         PLAYER_HEIGHT: 1.8,    // in blocks
         REACH_DISTANCE: 5,     // blocks
         DAY_LENGTH: 600,       // seconds for full day cycle
+        // Tweakable values (debug panel)
+        FALL_DAMAGE_THRESHOLD: 3,  // blocks before taking damage
+        FALL_DAMAGE_MULT: 1,       // damage multiplier
+        PLAYER_MAX_HEALTH: 20,     // max health
+        MOB_DAMAGE_MULT: 1,        // mob damage multiplier
+        MOB_SPEED_MULT: 1,         // mob speed multiplier
+        MOB_KNOCKBACK: 8,          // knockback force
+        MOB_AGGRO_RANGE: 15,       // blocks to aggro
+        MOB_DEAGGRO_RANGE: 20,     // blocks to lose aggro
+        MINING_SPEED_MULT: 1,      // mining speed multiplier
     };
 
     // --- HELPERS ---
@@ -1678,7 +1758,7 @@
         constructor(x, y) {
             super(x, y, CONFIG.PLAYER_WIDTH, CONFIG.PLAYER_HEIGHT);
             Object.assign(this, {
-                maxHealth: 20, health: 20, isDead: false,
+                maxHealth: CONFIG.PLAYER_MAX_HEALTH, health: CONFIG.PLAYER_MAX_HEALTH, isDead: false,
                 fallStartY: y, isFalling: false,
                 swingAngle: 0, isSwinging: false, swingProgress: 0,
                 inventory: Array(9).fill(null), selectedSlot: 0,
@@ -1792,7 +1872,8 @@
             let fallDamage = 0;
             if (this.onGround && this.isFalling) {
                 const dist = this.y - this.fallStartY;
-                if (dist > 3) { fallDamage = Math.floor(dist - 3); this.takeDamage(fallDamage); }
+                const threshold = CONFIG.FALL_DAMAGE_THRESHOLD;
+                if (dist > threshold) { fallDamage = Math.floor((dist - threshold) * CONFIG.FALL_DAMAGE_MULT); this.takeDamage(fallDamage); }
                 this.isFalling = false;
             }
 
@@ -1829,12 +1910,12 @@
             const dist = Math.sqrt(distX * distX + distY * distY);
 
             // Aggro
-            if (dist < 15) { this.aiState = 'chase'; this.targetPlayer = player; }
-            else if (dist > 20) { this.aiState = 'idle'; this.targetPlayer = null; }
+            if (dist < CONFIG.MOB_AGGRO_RANGE) { this.aiState = 'chase'; this.targetPlayer = player; }
+            else if (dist > CONFIG.MOB_DEAGGRO_RANGE) { this.aiState = 'idle'; this.targetPlayer = null; }
 
             // Chase movement
             if (this.aiState === 'chase' && this.targetPlayer && !this.targetPlayer.isDead) {
-                this.vx = Math.abs(distX) > 0.5 ? Math.sign(distX) * this.speed : 0;
+                this.vx = Math.abs(distX) > 0.5 ? Math.sign(distX) * this.speed * CONFIG.MOB_SPEED_MULT : 0;
                 if (distX > 0.5) this.facingRight = true;
                 if (distX < -0.5) this.facingRight = false;
 
@@ -1862,9 +1943,10 @@
 
             // Attack player on contact
             if (this.attackCooldown <= 0 && this.targetPlayer && !this.targetPlayer.isDead && this.distanceTo(this.targetPlayer) < 1.0) {
-                this.targetPlayer.takeDamage(this.damage);
+                const dmg = Math.floor(this.damage * CONFIG.MOB_DAMAGE_MULT);
+                this.targetPlayer.takeDamage(dmg);
                 this.attackCooldown = 1.0;
-                return { hitPlayer: true, damage: this.damage };
+                return { hitPlayer: true, damage: dmg };
             }
             return null;
         }
@@ -1873,7 +1955,7 @@
             if (this.invincibleTime > 0 || this.isDead) return false;
             this.health -= amount;
             this.invincibleTime = 0.3;
-            this.knockbackX = knockbackDir * 8;
+            this.knockbackX = knockbackDir * CONFIG.MOB_KNOCKBACK;
             if (this.health <= 0) this.isDead = true;
             return this.isDead;
         }
@@ -2584,9 +2666,11 @@
                     this.deleteSave();
                     location.reload();
                 } else if (e.code === 'KeyE') this.craftingSystem.toggle();
+                else if (e.code === 'F3') { e.preventDefault(); this.toggleDebugPanel(); }
                 else if (e.code === 'Escape') {
                     this.craftingSystem.isOpen && this.craftingSystem.close();
                     this.furnaceSystem.isOpen && this.furnaceSystem.close();
+                    document.getElementById('debugPanel').classList.remove('show');
                 }
             });
 
@@ -2745,6 +2829,59 @@
             crosshair.style.height = blockSize + 'px';
         }
 
+        toggleDebugPanel() {
+            const panel = document.getElementById('debugPanel');
+            panel.classList.toggle('show');
+            if (panel.classList.contains('show')) this.setupDebugPanel();
+        }
+
+        setupDebugPanel() {
+            const content = document.getElementById('debugContent');
+            const sections = [
+                { title: 'Movement & Physics', keys: ['JUMP_FORCE', 'MOVE_SPEED', 'GRAVITY', 'TERMINAL_VELOCITY'] },
+                { title: 'Damage & Health', keys: ['FALL_DAMAGE_THRESHOLD', 'FALL_DAMAGE_MULT', 'PLAYER_MAX_HEALTH'] },
+                { title: 'Combat', keys: ['MOB_DAMAGE_MULT', 'MOB_SPEED_MULT', 'MOB_KNOCKBACK', 'MOB_AGGRO_RANGE', 'MOB_DEAGGRO_RANGE'] },
+                { title: 'Interaction', keys: ['REACH_DISTANCE', 'MINING_SPEED_MULT'] },
+                { title: 'World', keys: ['DAY_LENGTH'] },
+            ];
+            const ranges = {
+                JUMP_FORCE: [5, 20, 0.5], MOVE_SPEED: [2, 15, 0.5], GRAVITY: [10, 60, 1], TERMINAL_VELOCITY: [10, 50, 1],
+                FALL_DAMAGE_THRESHOLD: [0, 10, 0.5], FALL_DAMAGE_MULT: [0, 3, 0.1], PLAYER_MAX_HEALTH: [1, 40, 1],
+                MOB_DAMAGE_MULT: [0, 5, 0.1], MOB_SPEED_MULT: [0, 3, 0.1], MOB_KNOCKBACK: [0, 20, 1],
+                MOB_AGGRO_RANGE: [5, 40, 1], MOB_DEAGGRO_RANGE: [10, 50, 1],
+                REACH_DISTANCE: [2, 15, 0.5], MINING_SPEED_MULT: [0.1, 5, 0.1], DAY_LENGTH: [60, 1200, 30],
+            };
+
+            content.innerHTML = sections.map(s => `
+                <div class="debug-section">
+                    <div class="debug-section-title">${s.title}</div>
+                    ${s.keys.map(key => {
+                        const [min, max, step] = ranges[key];
+                        const val = CONFIG[key];
+                        return `<div class="debug-row">
+                            <label>${key.replace(/_/g, ' ')}</label>
+                            <input type="range" min="${min}" max="${max}" step="${step}" value="${val}" data-key="${key}">
+                            <span class="debug-value">${val}</span>
+                        </div>`;
+                    }).join('')}
+                </div>
+            `).join('');
+
+            content.querySelectorAll('input[type="range"]').forEach(input => {
+                input.oninput = () => {
+                    const key = input.dataset.key;
+                    const val = parseFloat(input.value);
+                    CONFIG[key] = val;
+                    input.nextElementSibling.textContent = val;
+                    if (key === 'PLAYER_MAX_HEALTH') {
+                        this.player.maxHealth = val;
+                        this.player.health = Math.min(this.player.health, val);
+                        this.updateHealthBar();
+                    }
+                };
+            });
+        }
+
         setupUI() {
             const ui = document.getElementById('ui');
             ui.innerHTML = '';
@@ -2866,7 +3003,7 @@
                     }
 
                     this.player.startSwing();
-                    this.mining.progress += (dt / (block.hardness * 1000)) * this.player.getMiningSpeed(block);
+                    this.mining.progress += (dt / (block.hardness * 1000)) * this.player.getMiningSpeed(block) * CONFIG.MINING_SPEED_MULT;
 
                     // Update progress bar
                     const { miningProgress: bar, miningFill: fill } = this.dom;
