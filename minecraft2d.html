@@ -2807,46 +2807,59 @@
         }
 
         getBlockAtMouse() {
-            const blockSize = CONFIG.BLOCK_SIZE;
-            const screenCenterX = this.screenWidth / 2;
-            const screenCenterY = this.screenHeight / 2;
-
-            const worldX = this.cameraX + (this.mouse.x - screenCenterX) / blockSize;
-            const worldY = this.cameraY + (this.mouse.y - screenCenterY) / blockSize;
-
-            return {
-                x: Math.floor(worldX),
-                y: Math.floor(worldY),
-                worldX,
-                worldY
-            };
+            const bs = CONFIG.BLOCK_SIZE;
+            const [cx, cy] = [this.screenWidth / 2, this.screenHeight / 2];
+            const [worldX, worldY] = [this.cameraX + (this.mouse.x - cx) / bs, this.cameraY + (this.mouse.y - cy) / bs];
+            return { x: Math.floor(worldX), y: Math.floor(worldY), worldX, worldY };
         }
 
-        handleBlockInteraction(dt) {
+        // Unified input → intent: returns what the player wants to do this frame
+        getIntent() {
             const target = this.getBlockAtMouse();
             const dx = target.worldX - this.player.x;
             const dy = target.worldY - (this.player.y - this.player.height / 2);
             const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (distance > CONFIG.REACH_DISTANCE) {
+            if (distance > CONFIG.REACH_DISTANCE) return null;
+
+            const block = this.world.getBlock(target.x, target.y);
+            const heldItem = this.player.getHeldItem();
+
+            // Determine action from input state
+            let action = 'none';
+            if (this.mouse.left) {
+                action = this.mobSystem.mobs.some(m => !m.isDead && m.containsPoint(target.worldX, target.worldY))
+                    ? 'attack' : (block.id !== BLOCKS.AIR.id && block.hardness !== Infinity ? 'mine' : 'none');
+            } else if (this.mouse.right) {
+                this.mouse.right = false; // consume click
+                if (block.interactive) action = 'use';
+                else if (heldItem?.food) action = 'eat';
+                else if (block.id === BLOCKS.AIR.id && this.player.getSelectedBlock()) action = 'place';
+            }
+
+            return { target, block, distance, action, heldItem };
+        }
+
+        // Handle interaction based on intent - clean decision tree
+        interact(intent, dt) {
+            if (!intent || intent.action === 'none') {
                 this.mining = null;
+                this.dom.miningProgress.style.display = 'none';
                 return;
             }
 
-            // Left click - attack mobs or mine blocks
-            if (this.mouse.left) {
-                // Check if clicking on a mob first
-                const attackedMob = this.mobSystem.tryAttackMob(target.worldX, target.worldY, this.player.getHeldItem());
-                if (attackedMob) {
+            const { target, block, action, heldItem } = intent;
+
+            switch (action) {
+                case 'attack': {
+                    this.mobSystem.tryAttackMob(target.worldX, target.worldY, heldItem);
                     this.player.startSwing();
                     this.mining = null;
                     this.dom.miningProgress.style.display = 'none';
-                    return;
+                    break;
                 }
 
-                const block = this.world.getBlock(target.x, target.y);
-
-                if (block.id !== BLOCKS.AIR.id && block.hardness !== Infinity) {
+                case 'mine': {
                     // Start/reset mining if target changed
                     if (!this.mining || this.mining.x !== target.x || this.mining.y !== target.y) {
                         this.mining = { x: target.x, y: target.y, progress: 0, target: block };
@@ -2857,19 +2870,14 @@
 
                     // Update progress bar
                     const { miningProgress: bar, miningFill: fill } = this.dom;
-                    bar.style.display = 'block';
-                    bar.style.left = this.mouse.x - 20 + 'px';
-                    bar.style.top = this.mouse.y + 20 + 'px';
+                    Object.assign(bar.style, { display: 'block', left: this.mouse.x - 20 + 'px', top: this.mouse.y + 20 + 'px' });
                     fill.style.width = Math.min(100, this.mining.progress * 100) + '%';
 
                     if (this.mining.progress >= 1) {
-                        // Determine drop
+                        // Harvest drops
                         if (this.player.canHarvest(block) && !block.dropsNothing) {
-                            const dropItem = block.dropsItem ? getItemById(block.dropsItem)
-                                : block.drops ? BLOCKS[block.drops] : block;
-                            if (dropItem) this.player.addToInventory(dropItem);
-
-                            // Random bonus (apples from leaves)
+                            const drop = block.dropsItem ? getItemById(block.dropsItem) : block.drops ? BLOCKS[block.drops] : block;
+                            if (drop) this.player.addToInventory(drop);
                             if (block.randomDrop && Math.random() < block.randomDrop.chance) {
                                 const bonus = getItemById(block.randomDrop.itemId);
                                 if (bonus) { this.player.addToInventory(bonus); this.showNotification('Found an apple!'); }
@@ -2880,30 +2888,15 @@
                         bar.style.display = 'none';
                         this.updateUI();
                     }
-                }
-            } else {
-                this.mining = null;
-                this.dom.miningProgress.style.display = 'none';
-            }
-
-            // Right click - place, interact, or eat
-            if (this.mouse.right) {
-                this.mouse.right = false; // Single action per click
-
-                const currentBlock = this.world.getBlock(target.x, target.y);
-
-                // Check for interactive blocks first (like furnace)
-                if (currentBlock.interactive) {
-                    if (currentBlock.id === BLOCKS.FURNACE.id) {
-                        this.furnaceSystem.open(target.x, target.y);
-                    }
-                    return;
+                    break;
                 }
 
-                // Check if holding food - eat it
-                const heldItem = this.player.getHeldItem();
-                if (heldItem && heldItem.food) {
-                    // Only eat if not at full health
+                case 'use': {
+                    if (block.id === BLOCKS.FURNACE.id) this.furnaceSystem.open(target.x, target.y);
+                    break;
+                }
+
+                case 'eat': {
                     if (this.player.health < this.player.maxHealth) {
                         this.player.heal(heldItem.healAmount);
                         this.player.removeFromInventory(this.player.selectedSlot);
@@ -2913,29 +2906,25 @@
                     } else {
                         this.showNotification('Already at full health!');
                     }
-                    return;
+                    break;
                 }
 
-                // Place block if target is air
-                if (currentBlock.id === BLOCKS.AIR.id) {
+                case 'place': {
                     const selectedBlock = this.player.getSelectedBlock();
-                    if (selectedBlock) {
-                        // Check not placing inside player
-                        const playerBlocks = [
-                            { x: Math.floor(this.player.x), y: Math.floor(this.player.y) },
-                            { x: Math.floor(this.player.x), y: Math.floor(this.player.y - 1) }
-                        ];
-
-                        const isPlayerPos = playerBlocks.some(pb => pb.x === target.x && pb.y === target.y);
-
-                        if (!isPlayerPos) {
-                            this.world.setBlock(target.x, target.y, selectedBlock);
-                            this.player.removeFromInventory(this.player.selectedSlot);
-                            this.updateUI();
-                        }
+                    const px = Math.floor(this.player.x), py = Math.floor(this.player.y);
+                    const isPlayerPos = (target.x === px && target.y === py) || (target.x === px && target.y === py - 1);
+                    if (!isPlayerPos) {
+                        this.world.setBlock(target.x, target.y, selectedBlock);
+                        this.player.removeFromInventory(this.player.selectedSlot);
+                        this.updateUI();
                     }
+                    break;
                 }
             }
+        }
+
+        handleBlockInteraction(dt) {
+            this.interact(this.getIntent(), dt);
         }
 
         update(dt) {
