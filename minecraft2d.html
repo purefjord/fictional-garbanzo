@@ -2034,19 +2034,16 @@
     }
 
     // --- MOB SYSTEM ---
+    const MOB_TYPES = {
+        zombie: { health: 10, damage: 2, speed: 1.5, color: '#2a6e2a' },
+    };
+
     class Mob extends Entity {
         constructor(x, y, type = 'zombie') {
             super(x, y, 0.6, 1.8);
             this.type = type;
-
-            // Stats based on type
-            if (type === 'zombie') {
-                this.maxHealth = 10;
-                this.damage = 2;
-                this.speed = 1.5;
-                this.color = '#2a6e2a'; // Green zombie
-            }
-
+            const stats = MOB_TYPES[type];
+            Object.assign(this, { maxHealth: stats.health, damage: stats.damage, speed: stats.speed, color: stats.color });
             this.health = this.maxHealth;
             this.isDead = false;
             // onGround and facingRight inherited from Entity
@@ -3321,13 +3318,9 @@
         // Get texture for any item (block, tool, or material)
         getItemTexture(item, size = 32) {
             if (!item) return null;
-            if (TOOL_BY_ID[item.id]) {
-                return TextureGenerator.createToolTexture(item.key, size);
-            } else if (ITEM_BY_ID[item.id]) {
-                return TextureGenerator.createItemTexture(item.key, size);
-            } else {
-                return TextureGenerator.createTexture(item.key, size);
-            }
+            if (item.kind === 'tool') return TextureGenerator.createToolTexture(item.key, size);
+            if (item.kind === 'item') return TextureGenerator.createItemTexture(item.key, size);
+            return TextureGenerator.createTexture(item.key, size);
         }
 
         getBlockAtMouse() {
@@ -3796,26 +3789,11 @@
             }
 
             const itemSize = w * 0.8;
-
-            let texture = null;
-            if (heldItem.kind === 'tool') {
-                // Draw tool (pickaxe, axe, shovel)
-                texture = TextureGenerator.createToolTexture(heldItem.key, 32);
-                if (texture) {
-                    ctx.drawImage(texture, 0, -itemSize * 0.3, itemSize, itemSize);
-                }
-            } else if (heldItem.kind === 'item') {
-                // Draw material item (stick, coal, apple, etc.)
-                texture = TextureGenerator.createItemTexture(heldItem.key, 32);
-                if (texture) {
-                    ctx.drawImage(texture, 0, -itemSize * 0.3, itemSize * 0.7, itemSize * 0.7);
-                }
-            } else {
-                // Draw block preview
-                texture = TextureGenerator.createTexture(heldItem.key);
-                if (texture) {
-                    ctx.drawImage(texture, 0, -itemSize * 0.3, itemSize * 0.6, itemSize * 0.6);
-                }
+            const sizeScale = { tool: 1.0, item: 0.7, block: 0.6 }[heldItem.kind] || 0.6;
+            const texture = this.getItemTexture(heldItem, 32);
+            if (texture) {
+                const drawSize = itemSize * sizeScale;
+                ctx.drawImage(texture, 0, -itemSize * 0.3, drawSize, drawSize);
             }
 
             ctx.restore();
