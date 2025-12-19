@@ -1646,73 +1646,30 @@
         }
     }
 
-    // --- PLAYER ---
     // --- ENTITY BASE CLASS (shared physics/collision) ---
     class Entity {
         constructor(x, y, width, height) {
-            this.x = x;
-            this.y = y;
-            this.vx = 0;
-            this.vy = 0;
-            this.width = width;
-            this.height = height;
-            this.onGround = false;
-            this.facingRight = true;
+            Object.assign(this, { x, y, width, height, vx: 0, vy: 0, onGround: false, facingRight: true });
         }
 
-        // Shared collision detection
         checkCollision(world, x, y) {
-            const left = x - this.width / 2;
-            const right = x + this.width / 2;
-            const top = y - this.height;
-            const bottom = y;
-
-            // Sample multiple points for accurate collision
-            const points = [
-                [left, top], [right, top],
-                [left, bottom - 0.01], [right, bottom - 0.01],
-                [left, (top + bottom) / 2], [right, (top + bottom) / 2]
-            ];
-
-            for (const [px, py] of points) {
-                const block = world.getBlock(Math.floor(px), Math.floor(py));
-                if (block.solid) return true;
-            }
-            return false;
+            const [l, r, t, b] = [x - this.width / 2, x + this.width / 2, y - this.height, y];
+            return [[l, t], [r, t], [l, b - 0.01], [r, b - 0.01], [l, (t + b) / 2], [r, (t + b) / 2]]
+                .some(([px, py]) => world.getBlock(Math.floor(px), Math.floor(py)).solid);
         }
 
-        // Shared movement with collision
         moveWithCollision(world, dx, dy, steps = 10) {
-            const stepX = dx / steps;
-            const stepY = dy / steps;
-
+            const [stepX, stepY] = [dx / steps, dy / steps];
             for (let i = 0; i < steps; i++) {
-                const newX = this.x + stepX;
-                const newY = this.y + stepY;
-
-                if (!this.checkCollision(world, newX, this.y)) {
-                    this.x = newX;
-                }
-
-                if (!this.checkCollision(world, this.x, newY)) {
-                    this.y = newY;
-                } else {
-                    if (dy > 0) {
-                        this.onGround = true;
-                    }
-                    this.vy = 0;
-                }
+                if (!this.checkCollision(world, this.x + stepX, this.y)) this.x += stepX;
+                if (!this.checkCollision(world, this.x, this.y + stepY)) this.y += stepY;
+                else { if (dy > 0) this.onGround = true; this.vy = 0; }
             }
-
-            // Check if still on ground
-            if (!this.checkCollision(world, this.x, this.y + 0.1)) {
-                this.onGround = false;
-            }
+            if (!this.checkCollision(world, this.x, this.y + 0.1)) this.onGround = false;
         }
 
         distanceTo(other) {
-            const dx = other.x - this.x;
-            const dy = other.y - this.y;
+            const [dx, dy] = [other.x - this.x, other.y - this.y];
             return Math.sqrt(dx * dx + dy * dy);
         }
     }
@@ -1720,225 +1677,122 @@
     class Player extends Entity {
         constructor(x, y) {
             super(x, y, CONFIG.PLAYER_WIDTH, CONFIG.PLAYER_HEIGHT);
-
-            // Health system
-            this.maxHealth = 20;
-            this.health = this.maxHealth;
-            this.isDead = false;
-
-            // Fall damage tracking
-            this.fallStartY = y;
-            this.isFalling = false;
-
-            // Swing animation
-            this.swingAngle = 0;
-            this.isSwinging = false;
-            this.swingProgress = 0;
-
-            // Inventory: array of {itemId, count} - can be blocks or tools
-            this.inventory = new Array(9).fill(null);
-            this.selectedSlot = 0;
-
-            // Give starting items (including a wood pickaxe!)
-            this.addToInventory(TOOLS.WOOD_PICKAXE, 1);
-            this.addToInventory(BLOCKS.DIRT, 64);
-            this.addToInventory(BLOCKS.STONE, 32);
-            this.addToInventory(BLOCKS.WOOD, 16);
+            Object.assign(this, {
+                maxHealth: 20, health: 20, isDead: false,
+                fallStartY: y, isFalling: false,
+                swingAngle: 0, isSwinging: false, swingProgress: 0,
+                inventory: Array(9).fill(null), selectedSlot: 0,
+            });
+            [TOOLS.WOOD_PICKAXE, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD]
+                .forEach((item, i) => this.addToInventory(item, [1, 64, 32, 16][i]));
         }
 
-        // Get held item (block or tool)
         getHeldItem() {
             const slot = this.inventory[this.selectedSlot];
-            if (!slot) return null;
-            return getItemById(slot.itemId);
+            return slot ? getItemById(slot.itemId) : null;
         }
 
-        // Get held tool (if any) - only returns actual tools, not materials
         getHeldTool() {
             const slot = this.inventory[this.selectedSlot];
-            if (!slot) return null;
-            return TOOL_BY_ID[slot.itemId] || null;
+            return slot && TOOL_BY_ID[slot.itemId] || null;
         }
 
-        // Calculate mining speed multiplier based on tool
         getMiningSpeed(block) {
             const tool = this.getHeldTool();
-            if (!tool) return 1; // No tool = base speed
-
+            if (!tool || !block.toolType || tool.type !== block.toolType) return 1;
             const tierInfo = TOOL_TIERS[tool.tier];
-
-            // Check if tool matches block type
-            if (block.toolType && tool.type === block.toolType) {
-                // Check tier requirement
-                const minTier = block.minTier || 0;
-                if (tierInfo.tier >= minTier) {
-                    return tierInfo.speedMultiplier;
-                }
-            }
-
-            // Wrong tool type or tier too low
-            return 1;
+            return tierInfo.tier >= (block.minTier || 0) ? tierInfo.speedMultiplier : 1;
         }
 
-        // Check if tool can harvest block (for ore tier requirements)
         canHarvest(block) {
             if (!block.minTier) return true;
-
             const tool = this.getHeldTool();
-            if (!tool || tool.type !== block.toolType) return false;
-
-            const tierInfo = TOOL_TIERS[tool.tier];
-            return tierInfo.tier >= block.minTier;
+            return tool?.type === block.toolType && TOOL_TIERS[tool.tier].tier >= block.minTier;
         }
 
-        // Start swing animation
         startSwing() {
-            if (!this.isSwinging) {
-                this.isSwinging = true;
-                this.swingProgress = 0;
-            }
+            if (!this.isSwinging) Object.assign(this, { isSwinging: true, swingProgress: 0 });
         }
 
-        // Update swing animation
         updateSwing(dt) {
-            if (this.isSwinging) {
-                this.swingProgress += dt / 200; // 200ms swing duration
-                this.swingAngle = Math.sin(this.swingProgress * Math.PI) * 90;
-                if (this.swingProgress >= 1) {
-                    this.isSwinging = false;
-                    this.swingAngle = 0;
-                    this.swingProgress = 0;
-                }
-            }
+            if (!this.isSwinging) return;
+            this.swingProgress += dt / 200;
+            this.swingAngle = Math.sin(this.swingProgress * Math.PI) * 90;
+            if (this.swingProgress >= 1) Object.assign(this, { isSwinging: false, swingAngle: 0, swingProgress: 0 });
         }
 
         takeDamage(amount) {
             if (this.isDead) return;
             this.health = Math.max(0, this.health - amount);
-            if (this.health <= 0) {
-                this.isDead = true;
-            }
+            if (this.health <= 0) this.isDead = true;
             return this.health;
         }
 
-        heal(amount) {
-            this.health = Math.min(this.maxHealth, this.health + amount);
-        }
+        heal(amount) { this.health = Math.min(this.maxHealth, this.health + amount); }
 
         respawn(x, y) {
-            this.x = x;
-            this.y = y;
-            this.vx = 0;
-            this.vy = 0;
-            this.health = this.maxHealth;
-            this.isDead = false;
-            this.fallStartY = y;
-            this.isFalling = false;
+            Object.assign(this, { x, y, vx: 0, vy: 0, health: this.maxHealth, isDead: false, fallStartY: y, isFalling: false });
         }
 
         addToInventory(item, count = 1) {
-            // Returns number of items that couldn't be added (0 = complete success)
-            const canStack = isStackable(item);
-            const maxStack = canStack ? 64 : 1;
+            const [canStack, maxStack] = [isStackable(item), isStackable(item) ? 64 : 1];
             let remaining = count;
 
-            // Try to stack with existing slots first (only for stackable items)
+            // Stack with existing slots first
             if (canStack) {
-                for (let i = 0; i < this.inventory.length && remaining > 0; i++) {
-                    if (this.inventory[i] && this.inventory[i].itemId === item.id) {
-                        const space = maxStack - this.inventory[i].count;
-                        if (space > 0) {
-                            const toAdd = Math.min(space, remaining);
-                            this.inventory[i].count += toAdd;
-                            remaining -= toAdd;
-                        }
-                    }
+                for (const slot of this.inventory.filter(s => s?.itemId === item.id)) {
+                    const add = Math.min(maxStack - slot.count, remaining);
+                    slot.count += add;
+                    remaining -= add;
+                    if (!remaining) return 0;
                 }
             }
 
-            // Fill empty slots with remainder
+            // Fill empty slots
             for (let i = 0; i < this.inventory.length && remaining > 0; i++) {
                 if (!this.inventory[i]) {
-                    const toAdd = Math.min(maxStack, remaining);
-                    this.inventory[i] = { itemId: item.id, count: toAdd };
-                    remaining -= toAdd;
+                    const add = Math.min(maxStack, remaining);
+                    this.inventory[i] = { itemId: item.id, count: add };
+                    remaining -= add;
                 }
             }
-
-            return remaining; // 0 = success, >0 = overflow (items lost/dropped)
+            return remaining;
         }
 
         removeFromInventory(slot, count = 1) {
             if (!this.inventory[slot]) return false;
-
-            this.inventory[slot].count -= count;
-            if (this.inventory[slot].count <= 0) {
-                this.inventory[slot] = null;
-            }
+            if ((this.inventory[slot].count -= count) <= 0) this.inventory[slot] = null;
             return true;
         }
 
         getSelectedBlock() {
-            // Returns the selected block for placing (tools return null)
             const item = this.getHeldItem();
-            if (!item || item.kind !== 'block') return null;
-            return item;
+            return item?.kind === 'block' ? item : null;
         }
 
         update(world, keys, dt) {
             if (this.isDead) return 0;
-
-            // dt is already clamped by Game.update()
             const dtSeconds = dt / 1000;
 
-            // Horizontal movement (instant velocity, not acceleration-based)
-            if (keys.left) {
-                this.vx = -CONFIG.MOVE_SPEED;
-                this.facingRight = false;
-            } else if (keys.right) {
-                this.vx = CONFIG.MOVE_SPEED;
-                this.facingRight = true;
-            } else {
-                this.vx = 0;
-            }
+            // Movement
+            this.vx = keys.left ? -CONFIG.MOVE_SPEED : keys.right ? CONFIG.MOVE_SPEED : 0;
+            if (keys.left) this.facingRight = false;
+            if (keys.right) this.facingRight = true;
+            if (keys.jump && this.onGround) { this.vy = -CONFIG.JUMP_FORCE; this.onGround = false; }
 
-            // Jumping
-            if (keys.jump && this.onGround) {
-                this.vy = -CONFIG.JUMP_FORCE;
-                this.onGround = false;
-            }
+            // Fall tracking
+            if (this.onGround && this.vy >= 0) { this.fallStartY = this.y; this.isFalling = false; }
+            if (!this.onGround && this.vy > 0 && !this.isFalling) { this.fallStartY = this.y; this.isFalling = true; }
 
-            // Track fall start
-            const wasOnGround = this.onGround;
-            if (wasOnGround && this.vy >= 0) {
-                this.fallStartY = this.y;
-                this.isFalling = false;
-            }
-            if (!this.onGround && this.vy > 0) {
-                if (!this.isFalling) {
-                    this.fallStartY = this.y;
-                    this.isFalling = true;
-                }
-            }
+            // Physics
+            this.vy = Math.min(this.vy + CONFIG.GRAVITY * dtSeconds, CONFIG.TERMINAL_VELOCITY);
+            this.moveWithCollision(world, this.vx * dtSeconds, this.vy * dtSeconds);
 
-            // Gravity (acceleration in blocks/second²)
-            this.vy += CONFIG.GRAVITY * dtSeconds;
-            if (this.vy > CONFIG.TERMINAL_VELOCITY) this.vy = CONFIG.TERMINAL_VELOCITY;
-
-            // Move with collision detection (dt-based displacement)
-            const dx = this.vx * dtSeconds;
-            const dy = this.vy * dtSeconds;
-            this.moveWithCollision(world, dx, dy);
-
-            // Calculate fall damage on landing
+            // Fall damage
             let fallDamage = 0;
             if (this.onGround && this.isFalling) {
-                const fallDistance = this.y - this.fallStartY;
-                // Take damage for falls > 3 blocks (1 damage per block after 3)
-                if (fallDistance > 3) {
-                    fallDamage = Math.floor(fallDistance - 3);
-                    this.takeDamage(fallDamage);
-                }
+                const dist = this.y - this.fallStartY;
+                if (dist > 3) { fallDamage = Math.floor(dist - 3); this.takeDamage(fallDamage); }
                 this.isFalling = false;
             }
 
@@ -1955,304 +1809,157 @@
     class Mob extends Entity {
         constructor(x, y, type = 'zombie') {
             super(x, y, 0.6, 1.8);
-            this.type = type;
-            const stats = MOB_TYPES[type];
-            Object.assign(this, { maxHealth: stats.health, damage: stats.damage, speed: stats.speed, color: stats.color });
-            this.health = this.maxHealth;
-            this.isDead = false;
-            // onGround and facingRight inherited from Entity
-
-            // AI state
-            this.aiState = 'idle'; // 'idle', 'chase'
-            this.targetPlayer = null;
-            this.jumpCooldown = 0;
-
-            // Combat
-            this.invincibleTime = 0; // Invincibility frames after taking damage
-            this.knockbackX = 0;
-            this.attackCooldown = 0; // Cooldown between attacks on player
+            const s = MOB_TYPES[type];
+            Object.assign(this, {
+                type, maxHealth: s.health, health: s.health, damage: s.damage, speed: s.speed, color: s.color,
+                isDead: false, aiState: 'idle', targetPlayer: null,
+                jumpCooldown: 0, invincibleTime: 0, knockbackX: 0, attackCooldown: 0,
+            });
         }
 
         update(world, player, dt) {
             if (this.isDead) return;
+            const dtSec = dt / 1000;
 
-            const dtSeconds = dt / 1000;
+            // Tick cooldowns
+            ['invincibleTime', 'jumpCooldown', 'attackCooldown'].forEach(k => { if (this[k] > 0) this[k] -= dtSec; });
 
-            // Update cooldowns
-            if (this.invincibleTime > 0) this.invincibleTime -= dtSeconds;
-            if (this.jumpCooldown > 0) this.jumpCooldown -= dtSeconds;
-            if (this.attackCooldown > 0) this.attackCooldown -= dtSeconds;
+            // Distance to player
+            const [distX, distY] = [player.x - this.x, player.y - this.y];
+            const dist = Math.sqrt(distX * distX + distY * distY);
 
-            // AI: Check distance to player
-            const distX = player.x - this.x;
-            const distY = player.y - this.y;
-            const distance = Math.sqrt(distX * distX + distY * distY);
+            // Aggro
+            if (dist < 15) { this.aiState = 'chase'; this.targetPlayer = player; }
+            else if (dist > 20) { this.aiState = 'idle'; this.targetPlayer = null; }
 
-            // Aggro range
-            if (distance < 15) {
-                this.aiState = 'chase';
-                this.targetPlayer = player;
-            } else if (distance > 20) {
-                this.aiState = 'idle';
-                this.targetPlayer = null;
-            }
-
-            // Movement based on AI state
+            // Chase movement
             if (this.aiState === 'chase' && this.targetPlayer && !this.targetPlayer.isDead) {
-                // Move toward player
-                if (distX > 0.5) {
-                    this.vx = this.speed;
-                    this.facingRight = true;
-                } else if (distX < -0.5) {
-                    this.vx = -this.speed;
-                    this.facingRight = false;
-                } else {
-                    this.vx = 0;
-                }
+                this.vx = Math.abs(distX) > 0.5 ? Math.sign(distX) * this.speed : 0;
+                if (distX > 0.5) this.facingRight = true;
+                if (distX < -0.5) this.facingRight = false;
 
-                // Jump if blocked or player is above
+                // Jump if blocked or player above
                 if (this.onGround && this.jumpCooldown <= 0) {
-                    // Check if blocked by a wall
-                    const checkX = this.x + (this.facingRight ? 0.5 : -0.5);
-                    const blocked = world.getBlock(Math.floor(checkX), Math.floor(this.y - 0.5)).solid;
-
+                    const blocked = world.getBlock(Math.floor(this.x + (this.facingRight ? 0.5 : -0.5)), Math.floor(this.y - 0.5)).solid;
                     if (blocked || distY < -1.5) {
                         this.vy = -CONFIG.JUMP_FORCE * 0.8;
                         this.onGround = false;
                         this.jumpCooldown = 0.5;
                     }
                 }
-            } else {
-                // Idle: slow random movement or stand still
-                this.vx = 0;
-            }
+            } else this.vx = 0;
 
-            // Apply knockback
-            if (this.knockbackX !== 0) {
+            // Knockback decay
+            if (this.knockbackX) {
                 this.vx += this.knockbackX;
-                this.knockbackX *= 0.8; // Decay
+                this.knockbackX *= 0.8;
                 if (Math.abs(this.knockbackX) < 0.1) this.knockbackX = 0;
             }
 
-            // Gravity (dt-based, dtSeconds defined above)
-            this.vy += CONFIG.GRAVITY * dtSeconds;
-            if (this.vy > CONFIG.TERMINAL_VELOCITY) this.vy = CONFIG.TERMINAL_VELOCITY;
+            // Physics
+            this.vy = Math.min(this.vy + CONFIG.GRAVITY * dtSec, CONFIG.TERMINAL_VELOCITY);
+            this.moveWithCollision(world, this.vx * dtSec, this.vy * dtSec);
 
-            // Move with collision (dt-based)
-            const dx = this.vx * dtSeconds;
-            const dy = this.vy * dtSeconds;
-            this.moveWithCollision(world, dx, dy);
-
-            // Check contact with player for damage
-            if (this.attackCooldown <= 0 && this.targetPlayer && !this.targetPlayer.isDead) {
-                const contactDist = this.distanceTo(this.targetPlayer);
-
-                if (contactDist < 1.0) {
-                    // Hit player
-                    this.targetPlayer.takeDamage(this.damage);
-                    this.attackCooldown = 1.0; // 1 second between attacks
-                    return { hitPlayer: true, damage: this.damage };
-                }
+            // Attack player on contact
+            if (this.attackCooldown <= 0 && this.targetPlayer && !this.targetPlayer.isDead && this.distanceTo(this.targetPlayer) < 1.0) {
+                this.targetPlayer.takeDamage(this.damage);
+                this.attackCooldown = 1.0;
+                return { hitPlayer: true, damage: this.damage };
             }
-
             return null;
         }
-        // moveWithCollision and checkCollision inherited from Entity
 
         takeDamage(amount, knockbackDir = 0) {
             if (this.invincibleTime > 0 || this.isDead) return false;
-
             this.health -= amount;
-            this.invincibleTime = 0.3; // Brief invincibility
-            this.knockbackX = knockbackDir * 8; // Knockback force
-
-            if (this.health <= 0) {
-                this.isDead = true;
-                return true; // Died
-            }
-            return false;
+            this.invincibleTime = 0.3;
+            this.knockbackX = knockbackDir * 8;
+            if (this.health <= 0) this.isDead = true;
+            return this.isDead;
         }
 
-        // Check if a point (like mouse click) hits this mob
-        containsPoint(worldX, worldY) {
-            const halfW = this.width / 2;
-            return worldX >= this.x - halfW && worldX <= this.x + halfW &&
-                   worldY <= this.y && worldY >= this.y - this.height;
+        containsPoint(wx, wy) {
+            const hw = this.width / 2;
+            return wx >= this.x - hw && wx <= this.x + hw && wy <= this.y && wy >= this.y - this.height;
         }
     }
 
     // --- MOB SYSTEM MANAGER ---
     class MobSystem {
         constructor(maxMobs = 8) {
-            this.mobs = [];
-            this.maxMobs = maxMobs;
-            this.spawnCooldown = 0;
-
-            // These are set after construction
-            this.player = null;
-            this.world = null;
-            this.onMobHitPlayer = null; // callback: () => void
-            this.onMobKilled = null;    // callback: (mobType) => void
+            Object.assign(this, { mobs: [], maxMobs, spawnCooldown: 0, player: null, world: null, onMobHitPlayer: null, onMobKilled: null });
         }
 
         setPlayer(player) { this.player = player; }
         setWorld(world) { this.world = world; }
-        setCallbacks(onMobHitPlayer, onMobKilled) {
-            this.onMobHitPlayer = onMobHitPlayer;
-            this.onMobKilled = onMobKilled;
-        }
+        setCallbacks(onHit, onKill) { Object.assign(this, { onMobHitPlayer: onHit, onMobKilled: onKill }); }
 
         update(dt, dayProgress) {
-            this.updateMobs(dt);
-            this.spawnMobs(dt, dayProgress);
-        }
-
-        updateMobs(dt) {
             if (!this.player || !this.world) return;
 
-            for (let i = this.mobs.length - 1; i >= 0; i--) {
-                const mob = this.mobs[i];
+            // Update and cull mobs
+            this.mobs = this.mobs.filter(mob => {
                 const result = mob.update(this.world, this.player, dt);
+                if (result?.hitPlayer) this.onMobHitPlayer?.();
+                return !mob.isDead && Math.abs(mob.x - this.player.x) <= 50;
+            });
 
-                // Mob hit player
-                if (result && result.hitPlayer && this.onMobHitPlayer) {
-                    this.onMobHitPlayer();
-                }
-
-                // Remove dead mobs
-                if (mob.isDead) {
-                    this.mobs.splice(i, 1);
-                }
-
-                // Remove mobs too far from player
-                const dist = Math.abs(mob.x - this.player.x);
-                if (dist > 50) {
-                    this.mobs.splice(i, 1);
-                }
-            }
-        }
-
-        spawnMobs(dt, dayProgress) {
-            if (!this.player || !this.world) return;
-
-            // Only spawn at night (dayProgress 0.75-1.0 and 0-0.25 is night)
+            // Spawn at night
             const isNight = dayProgress > 0.75 || dayProgress < 0.25;
-            if (!isNight) return;
-
-            // Cooldown between spawns
             this.spawnCooldown -= dt / 1000;
-            if (this.spawnCooldown > 0) return;
+            if (!isNight || this.spawnCooldown > 0 || this.mobs.length >= this.maxMobs) return;
 
-            // Don't exceed max mobs
-            if (this.mobs.length >= this.maxMobs) return;
+            this.spawnCooldown = 3 + Math.random() * 5;
+            const spawnX = this.player.x + (Math.random() < 0.5 ? -1 : 1) * (15 + Math.random() * 10);
 
-            // Try to spawn a mob
-            this.spawnCooldown = 3 + Math.random() * 5; // 3-8 seconds between spawns
-
-            // Spawn off-screen but within reasonable distance
-            const spawnSide = Math.random() < 0.5 ? -1 : 1;
-            const spawnX = this.player.x + spawnSide * (15 + Math.random() * 10);
-
-            // Find ground level at spawn point
+            // Find ground
             let spawnY = 0;
-            for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
-                if (this.world.getBlock(Math.floor(spawnX), y).solid) {
-                    spawnY = y - 1;
-                    break;
-                }
-            }
+            for (let y = 0; y < CONFIG.WORLD_HEIGHT && !this.world.getBlock(Math.floor(spawnX), y).solid; y++) spawnY = y;
 
-            // Don't spawn underground (too deep)
+            // Validate spawn location
             if (spawnY > this.player.y + 10) return;
+            const floorX = Math.floor(spawnX), floorY = Math.floor(spawnY);
+            if (this.world.getBlock(floorX, floorY).solid || this.world.getBlock(floorX, floorY - 1).solid) return;
 
-            // Don't spawn if inside a block
-            if (this.world.getBlock(Math.floor(spawnX), Math.floor(spawnY)).solid ||
-                this.world.getBlock(Math.floor(spawnX), Math.floor(spawnY - 1)).solid) {
-                return;
-            }
-
-            // Create the zombie
-            const zombie = new Mob(spawnX, spawnY, 'zombie');
-            this.mobs.push(zombie);
+            this.mobs.push(new Mob(spawnX, spawnY, 'zombie'));
         }
 
         tryAttackMob(worldX, worldY, heldItem) {
-            if (!this.player) return null;
-
-            for (const mob of this.mobs) {
-                if (mob.isDead) continue;
-
-                if (mob.containsPoint(worldX, worldY)) {
-                    // Calculate damage: use tool's damage value or default to 1 (fist)
-                    const damage = heldItem?.damage ?? 1;
-
-                    // Knockback direction (away from player)
-                    const knockbackDir = mob.x > this.player.x ? 1 : -1;
-
-                    // Deal damage
-                    const died = mob.takeDamage(damage, knockbackDir);
-
-                    if (died && this.onMobKilled) {
-                        this.onMobKilled(mob.type);
-                    }
-
-                    return mob;
-                }
-            }
-            return null;
+            const mob = this.mobs.find(m => !m.isDead && m.containsPoint(worldX, worldY));
+            if (!mob) return null;
+            const died = mob.takeDamage(heldItem?.damage ?? 1, mob.x > this.player.x ? 1 : -1);
+            if (died) this.onMobKilled?.(mob.type);
+            return mob;
         }
 
         render(ctx, screenWidth, screenHeight, cameraX, cameraY) {
-            const blockSize = CONFIG.BLOCK_SIZE;
-            const screenCenterX = screenWidth / 2;
-            const screenCenterY = screenHeight / 2;
+            const [bs, cx, cy] = [CONFIG.BLOCK_SIZE, screenWidth / 2, screenHeight / 2];
 
-            for (const mob of this.mobs) {
-                if (mob.isDead) continue;
+            for (const mob of this.mobs.filter(m => !m.isDead)) {
+                const [px, py] = [cx + (mob.x - cameraX) * bs, cy + (mob.y - cameraY) * bs];
+                const [w, h] = [mob.width * bs, mob.height * bs];
+                const hurt = mob.invincibleTime > 0;
+                const dir = mob.facingRight ? 1 : -1;
 
-                const px = screenCenterX + (mob.x - cameraX) * blockSize;
-                const py = screenCenterY + (mob.y - cameraY) * blockSize;
+                ctx.fillStyle = hurt ? '#fff' : mob.color;
+                ctx.fillRect(px - w/2, py - h * 0.7, w, h * 0.5); // Body
+                ctx.fillRect(px + dir * w * 0.3, py - h * 0.6, w * 0.5 * dir, h * 0.1); // Arm
 
-                const w = mob.width * blockSize;
-                const h = mob.height * blockSize;
+                ctx.fillStyle = hurt ? '#fff' : '#4a8c4a';
+                ctx.fillRect(px - w/2 * 0.9, py - h, w * 0.9, h * 0.35); // Head
 
-                // Flash white when taking damage
-                const isHurt = mob.invincibleTime > 0;
+                ctx.fillStyle = '#f00';
+                const eo = dir * 0.1 * w;
+                ctx.fillRect(px - w * 0.15 + eo, py - h * 0.9, w * 0.12, w * 0.08); // Eyes
+                ctx.fillRect(px + w * 0.05 + eo, py - h * 0.9, w * 0.12, w * 0.08);
 
-                // Body
-                ctx.fillStyle = isHurt ? '#ffffff' : mob.color;
-                ctx.fillRect(px - w/2, py - h * 0.7, w, h * 0.5);
-
-                // Head
-                ctx.fillStyle = isHurt ? '#ffffff' : '#4a8c4a';
-                ctx.fillRect(px - w/2 * 0.9, py - h, w * 0.9, h * 0.35);
-
-                // Eyes (red for zombie)
-                ctx.fillStyle = '#ff0000';
-                const eyeOffset = mob.facingRight ? 0.1 : -0.1;
-                ctx.fillRect(px - w * 0.15 + w * eyeOffset, py - h * 0.9, w * 0.12, w * 0.08);
-                ctx.fillRect(px + w * 0.05 + w * eyeOffset, py - h * 0.9, w * 0.12, w * 0.08);
-
-                // Arms (reaching out)
-                ctx.fillStyle = isHurt ? '#ffffff' : mob.color;
-                const armDir = mob.facingRight ? 1 : -1;
-                ctx.fillRect(px + armDir * w * 0.3, py - h * 0.6, w * 0.5 * armDir, h * 0.1);
-
-                // Legs
-                ctx.fillStyle = isHurt ? '#ffffff' : '#1a4a1a';
-                ctx.fillRect(px - w/2, py - h * 0.2, w * 0.35, h * 0.2);
+                ctx.fillStyle = hurt ? '#fff' : '#1a4a1a';
+                ctx.fillRect(px - w/2, py - h * 0.2, w * 0.35, h * 0.2); // Legs
                 ctx.fillRect(px + w/2 - w * 0.35, py - h * 0.2, w * 0.35, h * 0.2);
 
-                // Health bar (if damaged)
-                if (mob.health < mob.maxHealth) {
-                    const barWidth = w;
-                    const barHeight = 4;
-                    const healthPercent = mob.health / mob.maxHealth;
-
-                    ctx.fillStyle = '#333';
-                    ctx.fillRect(px - barWidth/2, py - h - 10, barWidth, barHeight);
-                    ctx.fillStyle = '#ff3333';
-                    ctx.fillRect(px - barWidth/2, py - h - 10, barWidth * healthPercent, barHeight);
+                if (mob.health < mob.maxHealth) { // Health bar
+                    ctx.fillStyle = '#333'; ctx.fillRect(px - w/2, py - h - 10, w, 4);
+                    ctx.fillStyle = '#f33'; ctx.fillRect(px - w/2, py - h - 10, w * mob.health / mob.maxHealth, 4);
                 }
             }
         }
@@ -2313,151 +2020,85 @@
 
         handleSlotClick(slotType) {
             if (!this.active || !this.player) return;
-            const selectedSlot = this.player.inventory[this.player.selectedSlot];
-            const selectedItem = selectedSlot ? getItemById(selectedSlot.itemId) : null;
+            const held = this.player.inventory[this.player.selectedSlot];
+            const slot = this.active[slotType];
 
-            if (slotType === 'input') {
-                if (selectedItem) {
-                    const recipe = SMELT_BY_INPUT.get(selectedSlot.itemId);
-                    if (recipe) {
-                        if (!this.active.input) {
-                            this.active.input = { itemId: selectedSlot.itemId, count: selectedSlot.count };
-                            this.player.inventory[this.player.selectedSlot] = null;
-                        } else if (this.active.input.itemId === selectedSlot.itemId) {
-                            this.active.input.count += selectedSlot.count;
-                            this.player.inventory[this.player.selectedSlot] = null;
-                        }
-                    }
-                } else if (this.active.input) {
-                    const item = getItemById(this.active.input.itemId);
-                    if (this.player.addToInventory(item, this.active.input.count) === 0) {
-                        this.active.input = null;
-                    }
-                }
-            } else if (slotType === 'fuel') {
-                if (selectedItem && selectedSlot.itemId === ITEMS.COAL.id) {
-                    if (!this.active.fuel) {
-                        this.active.fuel = { itemId: selectedSlot.itemId, count: selectedSlot.count };
-                        this.player.inventory[this.player.selectedSlot] = null;
-                    } else if (this.active.fuel.itemId === selectedSlot.itemId) {
-                        this.active.fuel.count += selectedSlot.count;
-                        this.player.inventory[this.player.selectedSlot] = null;
-                    }
-                } else if (!selectedItem && this.active.fuel) {
-                    const item = getItemById(this.active.fuel.itemId);
-                    if (this.player.addToInventory(item, this.active.fuel.count) === 0) {
-                        this.active.fuel = null;
-                    }
-                }
-            } else if (slotType === 'output') {
-                if (this.active.output) {
-                    const item = getItemById(this.active.output.itemId);
-                    if (this.player.addToInventory(item, this.active.output.count) === 0) {
-                        this.active.output = null;
-                    }
-                }
+            // Validation: what can go where
+            const canAccept = {
+                input: held && SMELT_BY_INPUT.has(held.itemId),
+                fuel: held?.itemId === ITEMS.COAL.id,
+                output: false,
+            }[slotType];
+
+            if (held && canAccept) {
+                // Place item into slot
+                if (!slot) this.active[slotType] = { itemId: held.itemId, count: held.count };
+                else if (slot.itemId === held.itemId) slot.count += held.count;
+                else { this.updateUI(); return; }
+                this.player.inventory[this.player.selectedSlot] = null;
+            } else if (!held && slot) {
+                // Take item from slot
+                if (this.player.addToInventory(getItemById(slot.itemId), slot.count) === 0)
+                    this.active[slotType] = null;
             }
             this.updateUI();
-            if (this.onUIUpdate) this.onUIUpdate();
+            this.onUIUpdate?.();
         }
 
         updateUI() {
             if (!this.active) return;
 
-            const renderSlot = (slotEl, slotData) => {
-                slotEl.innerHTML = '';
-                if (slotData) {
-                    const item = getItemById(slotData.itemId);
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 32;
-                    canvas.height = 32;
-                    const texture = this.getItemTexture(item, 32);
-                    if (texture) {
-                        canvas.getContext('2d').drawImage(texture, 0, 0, 32, 32);
-                    }
-                    slotEl.appendChild(canvas);
-                    if (slotData.count > 1) {
-                        const countEl = document.createElement('span');
-                        countEl.className = 'slot-count';
-                        countEl.textContent = slotData.count;
-                        slotEl.appendChild(countEl);
-                    }
-                }
+            const renderSlot = (el, data) => {
+                el.innerHTML = '';
+                if (!data) return;
+                const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 32 });
+                const tex = this.getItemTexture(getItemById(data.itemId), 32);
+                if (tex) canvas.getContext('2d').drawImage(tex, 0, 0, 32, 32);
+                el.appendChild(canvas);
+                if (data.count > 1) el.appendChild(Object.assign(document.createElement('span'),
+                    { className: 'slot-count', textContent: data.count }));
             };
 
-            renderSlot(this.dom.furnaceInput, this.active.input);
-            renderSlot(this.dom.furnaceFuel, this.active.fuel);
-            renderSlot(this.dom.furnaceOutput, this.active.output);
+            ['input', 'fuel', 'output'].forEach(s => renderSlot(this.dom['furnace' + s[0].toUpperCase() + s.slice(1)], this.active[s]));
 
-            const { furnaceFire: fireEl, furnaceArrow: arrowEl, furnaceProgress: progressEl } = this.dom;
-            if (this.active.burnTime > 0) {
-                fireEl.classList.add('burning');
-                arrowEl.classList.add('active');
-            } else {
-                fireEl.classList.remove('burning');
-                arrowEl.classList.remove('active');
-            }
-            progressEl.style.width = (this.active.progress * 100) + '%';
+            const burning = this.active.burnTime > 0;
+            this.dom.furnaceFire.classList.toggle('burning', burning);
+            this.dom.furnaceArrow.classList.toggle('active', burning);
+            this.dom.furnaceProgress.style.width = (this.active.progress * 100) + '%';
         }
 
         update(dt, world) {
-            const dtSeconds = dt / 1000;
+            const dtSec = dt / 1000;
 
-            for (const furnace of this.furnaces.values()) {
-                // Check if furnace block still exists
-                const block = world.getBlock(furnace.x, furnace.y);
-                if (block.id !== BLOCKS.FURNACE.id) {
-                    this.furnaces.delete(`${furnace.x},${furnace.y}`);
-                    continue;
-                }
+            for (const [key, f] of this.furnaces) {
+                // Remove if block destroyed
+                if (world.getBlock(f.x, f.y).id !== BLOCKS.FURNACE.id) { this.furnaces.delete(key); continue; }
 
-                if (furnace.input && furnace.input.count > 0) {
-                    const recipe = SMELT_BY_INPUT.get(furnace.input.itemId);
-                    if (recipe) {
-                        const canOutput = !furnace.output ||
-                            (furnace.output.itemId === recipe.output.id && furnace.output.count < 64);
+                const recipe = f.input?.count > 0 && SMELT_BY_INPUT.get(f.input.itemId);
+                const canOutput = recipe && (!f.output || (f.output.itemId === recipe.output.id && f.output.count < 64));
 
-                        if (canOutput) {
-                            // Try to consume fuel
-                            if (furnace.burnTime <= 0 && furnace.fuel && furnace.fuel.count > 0) {
-                                furnace.fuel.count--;
-                                if (furnace.fuel.count <= 0) furnace.fuel = null;
-                                furnace.burnTime = 80;
-                            }
-
-                            // Smelt if we have fuel burning
-                            if (furnace.burnTime > 0) {
-                                furnace.burnTime -= dtSeconds;
-                                furnace.progress += dtSeconds / recipe.time;
-
-                                if (furnace.progress >= 1) {
-                                    furnace.progress = 0;
-                                    furnace.input.count--;
-                                    if (furnace.input.count <= 0) furnace.input = null;
-
-                                    if (!furnace.output) {
-                                        furnace.output = { itemId: recipe.output.id, count: 1 };
-                                    } else {
-                                        furnace.output.count++;
-                                    }
-                                }
-                            }
+                if (canOutput) {
+                    // Consume fuel if needed
+                    if (f.burnTime <= 0 && f.fuel?.count > 0) {
+                        if (--f.fuel.count <= 0) f.fuel = null;
+                        f.burnTime = 80;
+                    }
+                    // Smelt
+                    if (f.burnTime > 0) {
+                        f.burnTime -= dtSec;
+                        if ((f.progress += dtSec / recipe.time) >= 1) {
+                            f.progress = 0;
+                            if (--f.input.count <= 0) f.input = null;
+                            f.output ? f.output.count++ : (f.output = { itemId: recipe.output.id, count: 1 });
                         }
                     }
                 } else {
-                    furnace.progress = 0;
-                }
-
-                // Burn down fuel even if not smelting
-                if (furnace.burnTime > 0 && !furnace.input) {
-                    furnace.burnTime -= dtSeconds;
+                    f.progress = 0;
+                    if (f.burnTime > 0 && !f.input) f.burnTime -= dtSec;
                 }
             }
 
-            // Update UI if open
-            if (this.isOpen && this.active) {
-                this.updateUI();
-            }
+            if (this.isOpen && this.active) this.updateUI();
         }
     }
 
@@ -2923,101 +2564,50 @@
         }
 
         setupInput() {
+            // Key-to-action mappings
+            const keyMap = {
+                KeyA: 'left', ArrowLeft: 'left',
+                KeyD: 'right', ArrowRight: 'right',
+                KeyW: 'jump', ArrowUp: 'jump', Space: 'jump',
+            };
+
             document.addEventListener('keydown', (e) => {
-                switch(e.code) {
-                    case 'KeyA':
-                    case 'ArrowLeft':
-                        this.keys.left = true;
-                        break;
-                    case 'KeyD':
-                    case 'ArrowRight':
-                        this.keys.right = true;
-                        break;
-                    case 'KeyW':
-                    case 'ArrowUp':
-                    case 'Space':
-                        this.keys.jump = true;
-                        e.preventDefault();
-                        break;
-                    case 'Digit1': case 'Digit2': case 'Digit3':
-                    case 'Digit4': case 'Digit5': case 'Digit6':
-                    case 'Digit7': case 'Digit8': case 'Digit9':
-                        this.player.selectedSlot = parseInt(e.code.slice(-1)) - 1;
-                        this.updateUI();
-                        break;
-                    case 'KeyP':
-                        // Manual save
-                        this.saveGame();
-                        break;
-                    case 'KeyN':
-                        // New game (delete save and reload)
-                        if (confirm('Start a new game? Your current progress will be lost.')) {
-                            this.deleteSave();
-                            location.reload();
-                        }
-                        break;
-                    case 'KeyE':
-                        // Toggle crafting menu
-                        this.craftingSystem.toggle();
-                        break;
-                    case 'Escape':
-                        // Close menus
-                        if (this.craftingSystem.isOpen) {
-                            this.craftingSystem.close();
-                        }
-                        if (this.furnaceSystem.isOpen) {
-                            this.furnaceSystem.close();
-                        }
-                        break;
+                const key = keyMap[e.code];
+                if (key) {
+                    this.keys[key] = true;
+                    if (key === 'jump') e.preventDefault();
+                } else if (e.code.startsWith('Digit') && e.code.length === 6) {
+                    this.player.selectedSlot = e.code[5] - 1;
+                    this.updateUI();
+                } else if (e.code === 'KeyP') this.saveGame();
+                else if (e.code === 'KeyN' && confirm('Start a new game? Your current progress will be lost.')) {
+                    this.deleteSave();
+                    location.reload();
+                } else if (e.code === 'KeyE') this.craftingSystem.toggle();
+                else if (e.code === 'Escape') {
+                    this.craftingSystem.isOpen && this.craftingSystem.close();
+                    this.furnaceSystem.isOpen && this.furnaceSystem.close();
                 }
             });
 
             document.addEventListener('keyup', (e) => {
-                switch(e.code) {
-                    case 'KeyA':
-                    case 'ArrowLeft':
-                        this.keys.left = false;
-                        break;
-                    case 'KeyD':
-                    case 'ArrowRight':
-                        this.keys.right = false;
-                        break;
-                    case 'KeyW':
-                    case 'ArrowUp':
-                    case 'Space':
-                        this.keys.jump = false;
-                        break;
-                }
+                const key = keyMap[e.code];
+                if (key) this.keys[key] = false;
             });
 
-            this.canvas.addEventListener('mousemove', (e) => {
-                this.mouse.x = e.clientX;
-                this.mouse.y = e.clientY;
-            });
-
+            this.canvas.addEventListener('mousemove', (e) => Object.assign(this.mouse, { x: e.clientX, y: e.clientY }));
             this.canvas.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                if (e.button === 0) this.mouse.left = true;
-                if (e.button === 2) this.mouse.right = true;
+                this.mouse[e.button === 0 ? 'left' : 'right'] = true;
             });
-
             this.canvas.addEventListener('mouseup', (e) => {
-                if (e.button === 0) {
-                    this.mouse.left = false;
-                    this.mining.active = false;
-                }
-                if (e.button === 2) this.mouse.right = false;
+                if (e.button === 0) { this.mouse.left = false; this.mining.active = false; }
+                else this.mouse.right = false;
             });
-
             this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-
             this.canvas.addEventListener('wheel', (e) => {
                 e.preventDefault();
-                if (e.deltaY > 0) {
-                    this.player.selectedSlot = (this.player.selectedSlot + 1) % 9;
-                } else {
-                    this.player.selectedSlot = (this.player.selectedSlot - 1 + 9) % 9;
-                }
+                this.player.selectedSlot = (this.player.selectedSlot + (e.deltaY > 0 ? 1 : 8)) % 9;
                 this.updateUI();
             });
         }
