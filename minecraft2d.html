@@ -929,59 +929,13 @@
             canvas.height = size;
             const ctx = canvas.getContext('2d');
 
-            switch(blockType) {
-                case 'GRASS':
-                    this.drawGrass(ctx, size);
-                    break;
-                case 'DIRT':
-                    this.drawDirt(ctx, size);
-                    break;
-                case 'STONE':
-                    this.drawStone(ctx, size);
-                    break;
-                case 'COBBLESTONE':
-                    this.drawCobblestone(ctx, size);
-                    break;
-                case 'WOOD':
-                    this.drawWood(ctx, size);
-                    break;
-                case 'LEAVES':
-                    this.drawLeaves(ctx, size);
-                    break;
-                case 'SAND':
-                    this.drawSand(ctx, size);
-                    break;
-                case 'WATER':
-                    this.drawWater(ctx, size);
-                    break;
-                case 'COAL_ORE':
-                    this.drawOre(ctx, size, '#333');
-                    break;
-                case 'IRON_ORE':
-                    this.drawOre(ctx, size, '#d4a574');
-                    break;
-                case 'GOLD_ORE':
-                    this.drawOre(ctx, size, '#ffd700');
-                    break;
-                case 'DIAMOND_ORE':
-                    this.drawOre(ctx, size, '#00ffff');
-                    break;
-                case 'BEDROCK':
-                    this.drawBedrock(ctx, size);
-                    break;
-                case 'PLANKS':
-                    this.drawPlanks(ctx, size);
-                    break;
-                case 'GLASS':
-                    this.drawGlass(ctx, size);
-                    break;
-                case 'FURNACE':
-                    this.drawFurnace(ctx, size);
-                    break;
-                default:
-                    ctx.fillStyle = '#ff00ff';
-                    ctx.fillRect(0, 0, size, size);
-            }
+            // Lookup tables for block drawing
+            const oreColors = { COAL_ORE: '#333', IRON_ORE: '#d4a574', GOLD_ORE: '#ffd700', DIAMOND_ORE: '#00ffff' };
+            const drawFn = this['draw' + blockType.split('_').map(w => w[0] + w.slice(1).toLowerCase()).join('')];
+
+            if (oreColors[blockType]) this.drawOre(ctx, size, oreColors[blockType]);
+            else if (drawFn) drawFn.call(this, ctx, size);
+            else { ctx.fillStyle = '#ff00ff'; ctx.fillRect(0, 0, size, size); }
 
             this.cache[cacheKey] = canvas;
             return canvas;
@@ -1280,13 +1234,8 @@
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
 
-            if (tool.type === 'pickaxe') {
-                this.drawPickaxe(ctx, size, headColor, handleColor);
-            } else if (tool.type === 'axe') {
-                this.drawAxe(ctx, size, headColor, handleColor);
-            } else if (tool.type === 'shovel') {
-                this.drawShovel(ctx, size, headColor, handleColor);
-            }
+            const drawFn = { pickaxe: this.drawPickaxe, axe: this.drawAxe, shovel: this.drawShovel }[tool.type];
+            if (drawFn) drawFn.call(this, ctx, size, headColor, handleColor);
 
             this.cache[cacheKey] = canvas;
             return canvas;
@@ -1381,26 +1330,10 @@
             canvas.height = size;
             const ctx = canvas.getContext('2d');
 
-            switch (itemKey) {
-                case 'STICK':
-                    this.drawStick(ctx, size);
-                    break;
-                case 'COAL':
-                    this.drawCoal(ctx, size);
-                    break;
-                case 'IRON_INGOT':
-                    this.drawIngot(ctx, size, '#C0C0C0', '#888');
-                    break;
-                case 'DIAMOND':
-                    this.drawDiamond(ctx, size);
-                    break;
-                case 'APPLE':
-                    this.drawApple(ctx, size);
-                    break;
-                default:
-                    ctx.fillStyle = '#ff00ff';
-                    ctx.fillRect(size * 0.25, size * 0.25, size * 0.5, size * 0.5);
-            }
+            const drawFn = this['draw' + itemKey.split('_').map(w => w[0] + w.slice(1).toLowerCase()).join('')];
+            if (itemKey === 'IRON_INGOT') this.drawIngot(ctx, size, '#C0C0C0', '#888');
+            else if (drawFn) drawFn.call(this, ctx, size);
+            else { ctx.fillStyle = '#ff00ff'; ctx.fillRect(size * 0.25, size * 0.25, size * 0.5, size * 0.5); }
 
             this.cache[cacheKey] = canvas;
             return canvas;
