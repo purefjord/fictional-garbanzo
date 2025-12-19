@@ -692,18 +692,25 @@
         DAY_LENGTH: 600,       // seconds for full day cycle
     };
 
-    // --- DETERMINISTIC RNG HELPER ---
-    // Seeded hash for reproducible random values based on coordinates
+    // --- HELPERS ---
     function hash2i(seed, x, y) {
         let h = (seed | 0) ^ Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263);
         h = Math.imul(h ^ (h >>> 13), 1274126177);
-        h ^= h >>> 16;
-        return (h >>> 0) / 4294967296;
+        return (h ^ (h >>> 16)) >>> 0 / 4294967296;
     }
 
-    // --- BLOCK TYPES ---
-    // toolType: 'pickaxe' for stone/ore, 'axe' for wood, 'shovel' for dirt/sand
-    // dropsItem: item ID to drop instead of block (for ores)
+    // Registry: adds key, kind, builds lookup table
+    function register(collection, kind) {
+        const byId = {};
+        for (const [key, item] of Object.entries(collection)) {
+            item.key = key;
+            item.kind = kind;
+            byId[item.id] = item;
+        }
+        return byId;
+    }
+
+    // --- BLOCKS ---
     const BLOCKS = {
         AIR: { id: 0, name: 'Air', solid: false, transparent: true },
         GRASS: { id: 1, name: 'Grass', solid: true, hardness: 0.6, drops: 'DIRT', toolType: 'shovel' },
@@ -711,110 +718,87 @@
         STONE: { id: 3, name: 'Stone', solid: true, hardness: 1.5, drops: 'COBBLESTONE', toolType: 'pickaxe' },
         COBBLESTONE: { id: 4, name: 'Cobblestone', solid: true, hardness: 2, toolType: 'pickaxe' },
         WOOD: { id: 5, name: 'Wood', solid: true, hardness: 2, toolType: 'axe' },
-        LEAVES: { id: 6, name: 'Leaves', solid: true, hardness: 0.2, transparent: true, randomDrop: { itemId: 204, chance: 0.1 } }, // 10% chance for apple
+        LEAVES: { id: 6, name: 'Leaves', solid: true, hardness: 0.2, transparent: true, randomDrop: { itemId: 204, chance: 0.1 } },
         SAND: { id: 7, name: 'Sand', solid: true, hardness: 0.5, toolType: 'shovel' },
         WATER: { id: 8, name: 'Water', solid: false, transparent: true },
-        COAL_ORE: { id: 9, name: 'Coal Ore', solid: true, hardness: 3, toolType: 'pickaxe', dropsItem: 201 }, // Drops Coal
-        IRON_ORE: { id: 10, name: 'Iron Ore', solid: true, hardness: 3, toolType: 'pickaxe', minTier: 1 }, // Drops itself for smelting
+        COAL_ORE: { id: 9, name: 'Coal Ore', solid: true, hardness: 3, toolType: 'pickaxe', dropsItem: 201 },
+        IRON_ORE: { id: 10, name: 'Iron Ore', solid: true, hardness: 3, toolType: 'pickaxe', minTier: 1 },
         GOLD_ORE: { id: 11, name: 'Gold Ore', solid: true, hardness: 3, toolType: 'pickaxe', minTier: 2 },
-        DIAMOND_ORE: { id: 12, name: 'Diamond Ore', solid: true, hardness: 3, toolType: 'pickaxe', minTier: 2, dropsItem: 203 }, // Drops Diamond
+        DIAMOND_ORE: { id: 12, name: 'Diamond Ore', solid: true, hardness: 3, toolType: 'pickaxe', minTier: 2, dropsItem: 203 },
         BEDROCK: { id: 13, name: 'Bedrock', solid: true, hardness: Infinity },
         PLANKS: { id: 14, name: 'Planks', solid: true, hardness: 2, toolType: 'axe' },
         GLASS: { id: 15, name: 'Glass', solid: true, hardness: 0.3, transparent: true, dropsNothing: true },
         FURNACE: { id: 16, name: 'Furnace', solid: true, hardness: 3.5, toolType: 'pickaxe', interactive: true },
     };
+    const BLOCK_BY_ID = register(BLOCKS, 'block');
 
-    // Create ID to block mapping
-    const BLOCK_BY_ID = {};
-    for (const [key, block] of Object.entries(BLOCKS)) {
-        block.key = key;
-        block.kind = 'block';
-        BLOCK_BY_ID[block.id] = block;
-    }
-
-    // --- TOOLS ---
-    // Tools are items that speed up mining and are required for certain blocks
+    // --- TOOLS (generated from compact definition) ---
     const TOOL_TIERS = {
-        wood: { tier: 0, speedMultiplier: 2, durability: 60, color: '#8B5A2B' },
-        stone: { tier: 1, speedMultiplier: 4, durability: 132, color: '#808080' },
-        iron: { tier: 2, speedMultiplier: 6, durability: 251, color: '#C0C0C0' },
-        diamond: { tier: 3, speedMultiplier: 8, durability: 1562, color: '#00CED1' }
+        wood:    { tier: 0, speedMultiplier: 2, durability: 60,   color: '#8B5A2B' },
+        stone:   { tier: 1, speedMultiplier: 4, durability: 132,  color: '#808080' },
+        iron:    { tier: 2, speedMultiplier: 6, durability: 251,  color: '#C0C0C0' },
+        diamond: { tier: 3, speedMultiplier: 8, durability: 1562, color: '#00CED1' },
     };
-
-    const TOOLS = {
-        // Pickaxes - for stone, ores (damage: 2-5 by tier)
-        WOOD_PICKAXE: { id: 100, name: 'Wood Pickaxe', kind: 'tool', type: 'pickaxe', tier: 'wood', damage: 2, isItem: true, stackable: false },
-        STONE_PICKAXE: { id: 101, name: 'Stone Pickaxe', kind: 'tool', type: 'pickaxe', tier: 'stone', damage: 3, isItem: true, stackable: false },
-        IRON_PICKAXE: { id: 102, name: 'Iron Pickaxe', kind: 'tool', type: 'pickaxe', tier: 'iron', damage: 4, isItem: true, stackable: false },
-        DIAMOND_PICKAXE: { id: 103, name: 'Diamond Pickaxe', kind: 'tool', type: 'pickaxe', tier: 'diamond', damage: 5, isItem: true, stackable: false },
-        // Axes - for wood (damage: 4-7 by tier, axes hit harder)
-        WOOD_AXE: { id: 110, name: 'Wood Axe', kind: 'tool', type: 'axe', tier: 'wood', damage: 4, isItem: true, stackable: false },
-        STONE_AXE: { id: 111, name: 'Stone Axe', kind: 'tool', type: 'axe', tier: 'stone', damage: 5, isItem: true, stackable: false },
-        IRON_AXE: { id: 112, name: 'Iron Axe', kind: 'tool', type: 'axe', tier: 'iron', damage: 6, isItem: true, stackable: false },
-        DIAMOND_AXE: { id: 113, name: 'Diamond Axe', kind: 'tool', type: 'axe', tier: 'diamond', damage: 7, isItem: true, stackable: false },
-        // Shovels - for dirt, sand (damage: 1-2 by tier, shovels are weak weapons)
-        WOOD_SHOVEL: { id: 120, name: 'Wood Shovel', kind: 'tool', type: 'shovel', tier: 'wood', damage: 1, isItem: true, stackable: false },
-        STONE_SHOVEL: { id: 121, name: 'Stone Shovel', kind: 'tool', type: 'shovel', tier: 'stone', damage: 2, isItem: true, stackable: false },
-        IRON_SHOVEL: { id: 122, name: 'Iron Shovel', kind: 'tool', type: 'shovel', tier: 'iron', damage: 2, isItem: true, stackable: false },
-        DIAMOND_SHOVEL: { id: 123, name: 'Diamond Shovel', kind: 'tool', type: 'shovel', tier: 'diamond', damage: 3, isItem: true, stackable: false },
+    const TOOL_TYPES = {
+        pickaxe: { baseId: 100, baseDamage: 2 },
+        axe:     { baseId: 110, baseDamage: 4 },
+        shovel:  { baseId: 120, baseDamage: 1 },
     };
+    const TIERS = ['wood', 'stone', 'iron', 'diamond'];
 
-    // Create ID to tool mapping
-    const TOOL_BY_ID = {};
-    for (const [key, tool] of Object.entries(TOOLS)) {
-        tool.key = key;
-        TOOL_BY_ID[tool.id] = tool;
+    // Generate all tools: WOOD_PICKAXE, STONE_PICKAXE, etc.
+    const TOOLS = {};
+    for (const [type, { baseId, baseDamage }] of Object.entries(TOOL_TYPES)) {
+        TIERS.forEach((tier, i) => {
+            const key = `${tier.toUpperCase()}_${type.toUpperCase()}`;
+            const name = `${tier[0].toUpperCase() + tier.slice(1)} ${type[0].toUpperCase() + type.slice(1)}`;
+            TOOLS[key] = { id: baseId + i, name, type, tier, damage: baseDamage + i };
+        });
     }
+    const TOOL_BY_ID = register(TOOLS, 'tool');
 
-    // --- MATERIALS (non-block, non-tool items) ---
+    // --- ITEMS (materials) ---
     const ITEMS = {
-        STICK: { id: 200, name: 'Stick', kind: 'item', isItem: true, stackable: true },
-        COAL: { id: 201, name: 'Coal', kind: 'item', isItem: true, stackable: true },
-        IRON_INGOT: { id: 202, name: 'Iron Ingot', kind: 'item', isItem: true, stackable: true },
-        DIAMOND: { id: 203, name: 'Diamond', kind: 'item', isItem: true, stackable: true },
-        APPLE: { id: 204, name: 'Apple', kind: 'item', isItem: true, stackable: true, food: true, healAmount: 4 },
+        STICK:      { id: 200, name: 'Stick' },
+        COAL:       { id: 201, name: 'Coal' },
+        IRON_INGOT: { id: 202, name: 'Iron Ingot' },
+        DIAMOND:    { id: 203, name: 'Diamond' },
+        APPLE:      { id: 204, name: 'Apple', food: true, healAmount: 4 },
     };
+    const ITEM_BY_ID = register(ITEMS, 'item');
 
-    // Create ID to item mapping
-    const ITEM_BY_ID = {};
-    for (const [key, item] of Object.entries(ITEMS)) {
-        item.key = key;
-        ITEM_BY_ID[item.id] = item;
-    }
-
-    // Combined item lookup (blocks + tools + items)
+    // Unified lookup
     function getItemById(id) {
         return BLOCK_BY_ID[id] || TOOL_BY_ID[id] || ITEM_BY_ID[id];
     }
 
+    // Derived properties (avoid storing redundant data)
+    const isStackable = (item) => item.kind !== 'tool';
+
     // --- CRAFTING RECIPES ---
+    // Tool recipe materials by tier
+    const TIER_MATERIALS = {
+        wood: BLOCKS.PLANKS, stone: BLOCKS.COBBLESTONE, iron: ITEMS.IRON_INGOT, diamond: ITEMS.DIAMOND,
+    };
+    // Head count by tool type (shovel = 1, pickaxe/axe = 3)
+    const TOOL_HEAD_COUNT = { pickaxe: 3, axe: 3, shovel: 1 };
+
+    // Generate tool recipes
+    const TOOL_RECIPES = Object.values(TOOLS).map(tool => ({
+        result: tool, resultCount: 1,
+        ingredients: [
+            { item: TIER_MATERIALS[tool.tier], count: TOOL_HEAD_COUNT[tool.type] },
+            { item: ITEMS.STICK, count: 2 },
+        ],
+    }));
+
     const RECIPES = [
         // Basic materials
-        { result: BLOCKS.PLANKS, resultCount: 4, ingredients: [{ item: BLOCKS.WOOD, count: 1 }], name: 'Planks' },
-        { result: ITEMS.STICK, resultCount: 4, ingredients: [{ item: BLOCKS.PLANKS, count: 2 }], name: 'Sticks' },
-
-        // Furnace
-        { result: BLOCKS.FURNACE, resultCount: 1, ingredients: [{ item: BLOCKS.COBBLESTONE, count: 8 }], name: 'Furnace' },
-
-        // Wood tools
-        { result: TOOLS.WOOD_PICKAXE, resultCount: 1, ingredients: [{ item: BLOCKS.PLANKS, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Wood Pickaxe' },
-        { result: TOOLS.WOOD_AXE, resultCount: 1, ingredients: [{ item: BLOCKS.PLANKS, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Wood Axe' },
-        { result: TOOLS.WOOD_SHOVEL, resultCount: 1, ingredients: [{ item: BLOCKS.PLANKS, count: 1 }, { item: ITEMS.STICK, count: 2 }], name: 'Wood Shovel' },
-
-        // Stone tools
-        { result: TOOLS.STONE_PICKAXE, resultCount: 1, ingredients: [{ item: BLOCKS.COBBLESTONE, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Stone Pickaxe' },
-        { result: TOOLS.STONE_AXE, resultCount: 1, ingredients: [{ item: BLOCKS.COBBLESTONE, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Stone Axe' },
-        { result: TOOLS.STONE_SHOVEL, resultCount: 1, ingredients: [{ item: BLOCKS.COBBLESTONE, count: 1 }, { item: ITEMS.STICK, count: 2 }], name: 'Stone Shovel' },
-
-        // Iron tools
-        { result: TOOLS.IRON_PICKAXE, resultCount: 1, ingredients: [{ item: ITEMS.IRON_INGOT, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Iron Pickaxe' },
-        { result: TOOLS.IRON_AXE, resultCount: 1, ingredients: [{ item: ITEMS.IRON_INGOT, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Iron Axe' },
-        { result: TOOLS.IRON_SHOVEL, resultCount: 1, ingredients: [{ item: ITEMS.IRON_INGOT, count: 1 }, { item: ITEMS.STICK, count: 2 }], name: 'Iron Shovel' },
-
-        // Diamond tools
-        { result: TOOLS.DIAMOND_PICKAXE, resultCount: 1, ingredients: [{ item: ITEMS.DIAMOND, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Diamond Pickaxe' },
-        { result: TOOLS.DIAMOND_AXE, resultCount: 1, ingredients: [{ item: ITEMS.DIAMOND, count: 3 }, { item: ITEMS.STICK, count: 2 }], name: 'Diamond Axe' },
-        { result: TOOLS.DIAMOND_SHOVEL, resultCount: 1, ingredients: [{ item: ITEMS.DIAMOND, count: 1 }, { item: ITEMS.STICK, count: 2 }], name: 'Diamond Shovel' },
+        { result: BLOCKS.PLANKS, resultCount: 4, ingredients: [{ item: BLOCKS.WOOD, count: 1 }] },
+        { result: ITEMS.STICK, resultCount: 4, ingredients: [{ item: BLOCKS.PLANKS, count: 2 }] },
+        { result: BLOCKS.FURNACE, resultCount: 1, ingredients: [{ item: BLOCKS.COBBLESTONE, count: 8 }] },
+        // All tool recipes
+        ...TOOL_RECIPES,
     ];
 
     // --- SMELTING RECIPES ---
@@ -1855,9 +1839,7 @@
 
         addToInventory(item, count = 1) {
             // Returns number of items that couldn't be added (0 = complete success)
-            // Items stack if they have stackable: true (or undefined for blocks which default to stackable)
-            // Tools explicitly have stackable: false
-            const canStack = item.stackable !== false;
+            const canStack = isStackable(item);
             const maxStack = canStack ? 64 : 1;
             let remaining = count;
 
@@ -1900,7 +1882,7 @@
         getSelectedBlock() {
             // Returns the selected block for placing (tools return null)
             const item = this.getHeldItem();
-            if (!item || item.isItem) return null;
+            if (!item || item.kind !== 'block') return null;
             return item;
         }
 
@@ -2574,7 +2556,7 @@
 
             // Check if result fits
             let canFit = false;
-            const canStack = result.stackable !== false;
+            const canStack = isStackable(result);
             const maxStack = canStack ? 64 : 1;
 
             if (canStack) {
@@ -2608,27 +2590,16 @@
             const container = this.dom.craftingRecipes;
             container.innerHTML = '';
 
-            // Group recipes by category
-            const categories = {
-                'Materials': [], 'Wood Tools': [], 'Stone Tools': [],
-                'Iron Tools': [], 'Diamond Tools': [], 'Blocks': []
+            // Group recipes by category (derived from result properties)
+            const getCategory = (r) => {
+                if (r.kind === 'item' || r.id === BLOCKS.PLANKS.id) return 'Materials';
+                if (r.tier) return `${r.tier[0].toUpperCase() + r.tier.slice(1)} Tools`;
+                return 'Blocks';
             };
-
+            const categories = {};
             for (const recipe of RECIPES) {
-                const result = recipe.result;
-                if (result.id === ITEMS.STICK?.id || result.id === BLOCKS.PLANKS?.id) {
-                    categories['Materials'].push(recipe);
-                } else if (result.tier === 'wood') {
-                    categories['Wood Tools'].push(recipe);
-                } else if (result.tier === 'stone') {
-                    categories['Stone Tools'].push(recipe);
-                } else if (result.tier === 'iron') {
-                    categories['Iron Tools'].push(recipe);
-                } else if (result.tier === 'diamond') {
-                    categories['Diamond Tools'].push(recipe);
-                } else {
-                    categories['Blocks'].push(recipe);
-                }
+                const cat = getCategory(recipe.result);
+                (categories[cat] ??= []).push(recipe);
             }
 
             for (const [category, recipes] of Object.entries(categories)) {
@@ -2662,7 +2633,7 @@
                     header.appendChild(iconDiv);
 
                     const nameDiv = document.createElement('div');
-                    nameDiv.innerHTML = `<div class="recipe-name">${recipe.name}</div>` +
+                    nameDiv.innerHTML = `<div class="recipe-name">${recipe.result.name}</div>` +
                         (recipe.resultCount > 1 ? `<div class="recipe-count">x${recipe.resultCount}</div>` : '');
                     header.appendChild(nameDiv);
                     item.appendChild(header);
