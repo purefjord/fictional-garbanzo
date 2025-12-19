@@ -696,7 +696,7 @@
     function hash2i(seed, x, y) {
         let h = (seed | 0) ^ Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263);
         h = Math.imul(h ^ (h >>> 13), 1274126177);
-        return (h ^ (h >>> 16)) >>> 0 / 4294967296;
+        return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
     }
 
     // Registry: adds key, kind, builds lookup table
