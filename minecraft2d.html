@@ -734,10 +734,10 @@
 
     // --- TOOLS (generated from compact definition) ---
     const TOOL_TIERS = {
-        wood:    { tier: 0, speedMultiplier: 2, durability: 60,   color: '#8B5A2B' },
-        stone:   { tier: 1, speedMultiplier: 4, durability: 132,  color: '#808080' },
-        iron:    { tier: 2, speedMultiplier: 6, durability: 251,  color: '#C0C0C0' },
-        diamond: { tier: 3, speedMultiplier: 8, durability: 1562, color: '#00CED1' },
+        wood:    { tier: 0, speedMultiplier: 2, color: '#8B5A2B' },
+        stone:   { tier: 1, speedMultiplier: 4, color: '#808080' },
+        iron:    { tier: 2, speedMultiplier: 6, color: '#C0C0C0' },
+        diamond: { tier: 3, speedMultiplier: 8, color: '#00CED1' },
     };
     const TOOL_TYPES = {
         pickaxe: { baseId: 100, baseDamage: 2 },
@@ -1710,10 +1710,9 @@
             }
         }
 
-        // Distance to another entity or point
         distanceTo(other) {
-            const dx = (other.x !== undefined ? other.x : other) - this.x;
-            const dy = (other.y !== undefined ? other.y : 0) - this.y;
+            const dx = other.x - this.x;
+            const dy = other.y - this.y;
             return Math.sqrt(dx * dx + dy * dy);
         }
     }
@@ -1987,7 +1986,7 @@
             // AI: Check distance to player
             const distX = player.x - this.x;
             const distY = player.y - this.y;
-            const distance = this.distanceTo(player);
+            const distance = Math.sqrt(distX * distX + distY * distY);
 
             // Aggro range
             if (distance < 15) {
@@ -2885,7 +2884,6 @@
             this.canvas.style.height = window.innerHeight + 'px';
             this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             this.ctx.imageSmoothingEnabled = false;
-            this.dpr = dpr;
             // Store CSS pixel dimensions for rendering calculations
             this.screenWidth = window.innerWidth;
             this.screenHeight = window.innerHeight;
