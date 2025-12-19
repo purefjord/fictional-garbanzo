@@ -2177,8 +2177,8 @@
             const result = recipe.result;
             const resultCount = recipe.resultCount;
 
-            // Test if result fits (virtual inventory check)
-            const testInv = structuredClone(this.player.inventory);
+            // Test if result fits (shallow copy for simulation)
+            const testInv = this.player.inventory.map(s => s && {...s});
 
             // Virtually consume ingredients
             for (const ingredient of recipe.ingredients) {
@@ -2438,8 +2438,8 @@
             this.mouse = { x: 0, y: 0, left: false, right: false };
             this.setupInput();
 
-            // Mining
-            this.mining = { active: false, x: 0, y: 0, progress: 0, target: null };
+            // Mining state: null | {x, y, progress, target}
+            this.mining = null;
 
             // Mob System
             this.mobSystem = new MobSystem(8);
@@ -2601,7 +2601,7 @@
                 this.mouse[e.button === 0 ? 'left' : 'right'] = true;
             });
             this.canvas.addEventListener('mouseup', (e) => {
-                if (e.button === 0) { this.mouse.left = false; this.mining.active = false; }
+                if (e.button === 0) { this.mouse.left = false; this.mining = null; }
                 else this.mouse.right = false;
             });
             this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -2706,7 +2706,7 @@
                     }
 
                     this.mouse.left = false;
-                    this.mining.active = false;
+                    this.mining = null;
                     isTouchingCanvas = false;
                 }
             }, { passive: false });
@@ -2717,7 +2717,7 @@
                     touchHoldTimer = null;
                 }
                 this.mouse.left = false;
-                this.mining.active = false;
+                this.mining = null;
                 isTouchingCanvas = false;
             });
 
@@ -2829,7 +2829,7 @@
             const distance = Math.sqrt(dx * dx + dy * dy);
 
             if (distance > CONFIG.REACH_DISTANCE) {
-                this.mining.active = false;
+                this.mining = null;
                 return;
             }
 
@@ -2839,8 +2839,7 @@
                 const attackedMob = this.mobSystem.tryAttackMob(target.worldX, target.worldY, this.player.getHeldItem());
                 if (attackedMob) {
                     this.player.startSwing();
-                    // Don't mine while attacking
-                    this.mining.active = false;
+                    this.mining = null;
                     this.dom.miningProgress.style.display = 'none';
                     return;
                 }
@@ -2848,68 +2847,42 @@
                 const block = this.world.getBlock(target.x, target.y);
 
                 if (block.id !== BLOCKS.AIR.id && block.hardness !== Infinity) {
-                    if (!this.mining.active || this.mining.x !== target.x || this.mining.y !== target.y) {
-                        this.mining = {
-                            active: true,
-                            x: target.x,
-                            y: target.y,
-                            progress: 0,
-                            target: block
-                        };
+                    // Start/reset mining if target changed
+                    if (!this.mining || this.mining.x !== target.x || this.mining.y !== target.y) {
+                        this.mining = { x: target.x, y: target.y, progress: 0, target: block };
                     }
 
-                    // Start swing animation when mining
                     this.player.startSwing();
+                    this.mining.progress += (dt / (block.hardness * 1000)) * this.player.getMiningSpeed(block);
 
-                    // Apply tool speed multiplier
-                    const miningSpeed = this.player.getMiningSpeed(block);
-                    this.mining.progress += (dt / (block.hardness * 1000)) * miningSpeed;
-
-                    // Update mining progress bar
-                    const progressBar = this.dom.miningProgress;
-                    const fill = this.dom.miningFill;
-                    progressBar.style.display = 'block';
-                    progressBar.style.left = this.mouse.x - 20 + 'px';
-                    progressBar.style.top = this.mouse.y + 20 + 'px';
+                    // Update progress bar
+                    const { miningProgress: bar, miningFill: fill } = this.dom;
+                    bar.style.display = 'block';
+                    bar.style.left = this.mouse.x - 20 + 'px';
+                    bar.style.top = this.mouse.y + 20 + 'px';
                     fill.style.width = Math.min(100, this.mining.progress * 100) + '%';
 
                     if (this.mining.progress >= 1) {
-                        // Check if tool can harvest this block (for ores with tier requirements)
+                        // Determine drop
                         if (this.player.canHarvest(block) && !block.dropsNothing) {
-                            // Determine what to drop
-                            let dropItem;
-                            if (block.dropsItem) {
-                                // Drops a specific item (like coal from coal ore)
-                                dropItem = getItemById(block.dropsItem);
-                            } else if (block.drops) {
-                                // Drops a different block (like cobblestone from stone)
-                                dropItem = BLOCKS[block.drops];
-                            } else {
-                                // Drops itself
-                                dropItem = block;
-                            }
-                            if (dropItem) {
-                                this.player.addToInventory(dropItem);
-                            }
+                            const dropItem = block.dropsItem ? getItemById(block.dropsItem)
+                                : block.drops ? BLOCKS[block.drops] : block;
+                            if (dropItem) this.player.addToInventory(dropItem);
 
-                            // Check for random bonus drops (like apples from leaves)
+                            // Random bonus (apples from leaves)
                             if (block.randomDrop && Math.random() < block.randomDrop.chance) {
-                                const bonusItem = getItemById(block.randomDrop.itemId);
-                                if (bonusItem) {
-                                    this.player.addToInventory(bonusItem);
-                                    this.showNotification('Found an apple!');
-                                }
+                                const bonus = getItemById(block.randomDrop.itemId);
+                                if (bonus) { this.player.addToInventory(bonus); this.showNotification('Found an apple!'); }
                             }
                         }
-                        // Block breaks either way, but no drops if wrong tool tier or dropsNothing
                         this.world.setBlock(target.x, target.y, BLOCKS.AIR);
-                        this.mining.active = false;
-                        progressBar.style.display = 'none';
+                        this.mining = null;
+                        bar.style.display = 'none';
                         this.updateUI();
                     }
                 }
             } else {
-                this.mining.active = false;
+                this.mining = null;
                 this.dom.miningProgress.style.display = 'none';
             }
 
@@ -3125,7 +3098,7 @@
                 ctx.lineWidth = 1;
 
                 // Mining crack overlay
-                if (this.mining.active && this.mining.x === target.x && this.mining.y === target.y) {
+                if (this.mining && this.mining.x === target.x && this.mining.y === target.y) {
                     ctx.fillStyle = `rgba(0,0,0,${this.mining.progress * 0.5})`;
                     ctx.fillRect(screenX, screenY, blockSize, blockSize);
                 }
