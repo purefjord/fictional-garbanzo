@@ -121,6 +121,27 @@ TUNE <tune_id>
 | `PAL <palette_id>` | No | Palette to use (default: 0) |
 | `TUNE <tune_id>` | No | Background music |
 
+### Important: Exits and Endings are Invisible
+
+**Exits (`EXT`) and endings (`END`) are invisible mechanics.** The player cannot see them - they're just coordinates that trigger behavior when walked on.
+
+To make exits and endings visible, place a tile at the same location:
+
+1. Create a visual tile (door, stairs, portal, treasure chest, etc.)
+2. Place that tile in the room grid at the exit/ending coordinates
+3. Add the `EXT` or `END` line with the same coordinates
+
+Example: If you want a door exit at position (2,2):
+```
+ROOM 0
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+0,a,b,a,a,a,a,a,a,a,a,a,a,a,a,0   <- tile 'b' (door) at x=2
+...
+EXT 2,1 1 8,8                      <- exit at same location as door tile
+```
+
+Without a visual tile, players may stumble into exits/endings by accident, which is usually poor game design.
+
 ### Example
 
 ```
