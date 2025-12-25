@@ -123,6 +123,17 @@
         BEDROCK: { id: 13, name: 'Bedrock', solid: true, hardness: Infinity },
         PLANKS: { id: 14, name: 'Planks', solid: true, hardness: 2 },
         GLASS: { id: 15, name: 'Glass', solid: true, hardness: 0.3, transparent: true },
+        SNOW_GRASS: { id: 16, name: 'Snow Grass', solid: true, hardness: 0.6, drops: 'DIRT' },
+        CACTUS: { id: 17, name: 'Cactus', solid: true, hardness: 0.4 },
+        SNOW_LEAVES: { id: 18, name: 'Snow Leaves', solid: true, hardness: 0.2, transparent: true },
+    };
+
+    // Biome definitions
+    const BIOMES = {
+        FOREST: { id: 0, surfaceBlock: 'GRASS', treeChance: 0.6, treeDensity: 8 },
+        PLAINS: { id: 1, surfaceBlock: 'GRASS', treeChance: 0.2, treeDensity: 15 },
+        DESERT: { id: 2, surfaceBlock: 'SAND', treeChance: 0.15, treeDensity: 12, cactus: true },
+        SNOW: { id: 3, surfaceBlock: 'SNOW_GRASS', treeChance: 0.4, treeDensity: 10, snowyTrees: true },
     };
 
     // Create ID to block mapping
@@ -280,6 +291,15 @@
                 case 'GLASS':
                     this.drawGlass(ctx, size);
                     break;
+                case 'SNOW_GRASS':
+                    this.drawSnowGrass(ctx, size);
+                    break;
+                case 'CACTUS':
+                    this.drawCactus(ctx, size);
+                    break;
+                case 'SNOW_LEAVES':
+                    this.drawSnowLeaves(ctx, size);
+                    break;
                 default:
                     ctx.fillStyle = '#ff00ff';
                     ctx.fillRect(0, 0, size, size);
@@ -414,6 +434,50 @@
             ctx.fill();
         },
 
+        drawSnowGrass(ctx, size) {
+            ctx.fillStyle = '#8B5A2B';
+            ctx.fillRect(0, 0, size, size);
+            this.addNoise(ctx, size, '#6B4226', 0.3);
+            // Snow top
+            const gradient = ctx.createLinearGradient(0, 0, 0, size * 0.4);
+            gradient.addColorStop(0, '#ffffff');
+            gradient.addColorStop(1, '#e8e8f0');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size * 0.35);
+            // Snow sparkles
+            ctx.fillStyle = 'rgba(200, 220, 255, 0.8)';
+            for (let i = 0; i < 5; i++) ctx.fillRect(Math.random() * size, Math.random() * size * 0.3, 1, 1);
+        },
+
+        drawCactus(ctx, size) {
+            ctx.fillStyle = '#2d5a27';
+            ctx.fillRect(size * 0.2, 0, size * 0.6, size);
+            ctx.fillStyle = '#3d7a37';
+            ctx.fillRect(size * 0.25, 0, size * 0.1, size);
+            // Spines
+            ctx.strokeStyle = '#1a3a17';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 6; i++) {
+                const y = size * 0.1 + i * size * 0.15;
+                ctx.beginPath(); ctx.moveTo(size * 0.2, y); ctx.lineTo(size * 0.1, y - 2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(size * 0.8, y); ctx.lineTo(size * 0.9, y - 2); ctx.stroke();
+            }
+        },
+
+        drawSnowLeaves(ctx, size) {
+            ctx.fillStyle = '#1a5a1a';
+            ctx.fillRect(0, 0, size, size);
+            for (let i = 0; i < 12; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? '#2a7a2a' : '#104010';
+                ctx.beginPath();
+                ctx.arc(Math.random() * size, Math.random() * size, 2 + Math.random() * 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            // Snow patches
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            for (let i = 0; i < 8; i++) ctx.fillRect(Math.random() * size, Math.random() * size, 2 + Math.random() * 3, 2);
+        },
+
         addNoise(ctx, size, color, intensity) {
             ctx.fillStyle = color;
             for (let i = 0; i < size * size * intensity; i++) {
@@ -457,11 +521,20 @@
             this.noise = new SimplexNoise(this.seed);
             this.caveNoise = new SimplexNoise(this.seed + 1000);
             this.oreNoise = new SimplexNoise(this.seed + 2000);
+            this.biomeNoise = new SimplexNoise(this.seed + 3000);
 
             // Chunk-based loading
             this.chunkSize = 16;
             this.chunks = new Map();
             this.modifiedBlocks = new Map(); // Track player modifications
+        }
+
+        getBiome(x) {
+            const biomeValue = this.biomeNoise.noise2D(x * 0.005, 0);
+            if (biomeValue < -0.3) return BIOMES.SNOW;
+            if (biomeValue < 0.1) return BIOMES.FOREST;
+            if (biomeValue < 0.4) return BIOMES.PLAINS;
+            return BIOMES.DESERT;
         }
 
         getChunkKey(cx, cy) {
@@ -518,6 +591,7 @@
         }
 
         generateBlock(x, y) {
+            const biome = this.getBiome(x);
             // Get surface height using multi-octave noise
             const surfaceNoise = this.noise.octaveNoise(x * 0.02, 0, 4, 0.5);
             const surfaceHeight = CONFIG.SURFACE_HEIGHT + Math.floor(surfaceNoise * 20);
@@ -536,21 +610,21 @@
 
             // Cave generation
             const caveValue = this.caveNoise.octaveNoise(x * 0.05, y * 0.05, 3, 0.5);
-            const caveThreshold = 0.3 + (y / this.height) * 0.1; // Caves more common deeper
+            const caveThreshold = 0.3 + (y / this.height) * 0.1;
 
             if (y > surfaceHeight + 5 && caveValue > caveThreshold) {
                 return BLOCKS.AIR.id;
             }
 
-            // Surface layer
+            // Surface layer - use biome-specific block
             if (y === surfaceHeight) {
-                return BLOCKS.GRASS.id;
+                return BLOCKS[biome.surfaceBlock].id;
             }
 
-            // Dirt layer (3-5 blocks deep)
-            const dirtDepth = 3 + Math.floor(this.noise.noise2D(x * 0.1, y * 0.1) * 2);
-            if (y <= surfaceHeight + dirtDepth) {
-                return BLOCKS.DIRT.id;
+            // Subsurface layer (3-5 blocks deep)
+            const subDepth = 3 + Math.floor(this.noise.noise2D(x * 0.1, y * 0.1) * 2);
+            if (y <= surfaceHeight + subDepth) {
+                return biome === BIOMES.DESERT ? BLOCKS.SAND.id : BLOCKS.DIRT.id;
             }
 
             // Stone with ores
@@ -569,8 +643,9 @@
         }
 
         // Generate trees after initial terrain
-        generateTree(baseX, baseY) {
+        generateTree(baseX, baseY, snowy = false) {
             const trunkHeight = 4 + Math.floor(Math.random() * 3);
+            const leafBlock = snowy ? BLOCKS.SNOW_LEAVES : BLOCKS.LEAVES;
 
             // Trunk
             for (let y = 0; y < trunkHeight; y++) {
@@ -582,23 +657,24 @@
             for (let dy = -2; dy <= 1; dy++) {
                 for (let dx = -2; dx <= 2; dx++) {
                     if (Math.abs(dx) === 2 && Math.abs(dy) === 1) continue;
-                    if (dx === 0 && dy <= 0) continue; // Leave space for trunk top
+                    if (dx === 0 && dy <= 0) continue;
                     if (Math.abs(dx) + Math.abs(dy) > 3) continue;
-
-                    const lx = baseX + dx;
-                    const ly = leafStart + dy;
-
-                    if (this.getBlock(lx, ly).id === BLOCKS.AIR.id) {
-                        this.setBlock(lx, ly, BLOCKS.LEAVES);
-                    }
+                    const lx = baseX + dx, ly = leafStart + dy;
+                    if (this.getBlock(lx, ly).id === BLOCKS.AIR.id) this.setBlock(lx, ly, leafBlock);
                 }
             }
-
             // Top leaves
-            this.setBlock(baseX, leafStart - 2, BLOCKS.LEAVES);
-            this.setBlock(baseX - 1, leafStart - 1, BLOCKS.LEAVES);
-            this.setBlock(baseX + 1, leafStart - 1, BLOCKS.LEAVES);
-            this.setBlock(baseX, leafStart - 1, BLOCKS.LEAVES);
+            this.setBlock(baseX, leafStart - 2, leafBlock);
+            this.setBlock(baseX - 1, leafStart - 1, leafBlock);
+            this.setBlock(baseX + 1, leafStart - 1, leafBlock);
+            this.setBlock(baseX, leafStart - 1, leafBlock);
+        }
+
+        generateCactus(baseX, baseY) {
+            const height = 2 + Math.floor(Math.random() * 2);
+            for (let y = 0; y < height; y++) {
+                this.setBlock(baseX, baseY - y - 1, BLOCKS.CACTUS);
+            }
         }
     }
 
@@ -784,22 +860,19 @@
 
                 this.player = new Player(spawnX + 0.5, spawnY);
 
-                // Generate some trees near spawn (but not AT spawn)
-                for (let i = -10; i < 10; i++) {
+                // Generate vegetation near spawn based on biome
+                for (let i = -15; i < 15; i++) {
                     const tx = spawnX + i * 8 + Math.floor(Math.random() * 4);
-
-                    // Skip trees too close to spawn point to avoid trapping player
                     if (Math.abs(tx - spawnX) < 4) continue;
-
+                    const biome = this.world.getBiome(tx);
                     let ty = 0;
+                    const surfaceBlocks = [BLOCKS.GRASS.id, BLOCKS.SAND.id, BLOCKS.SNOW_GRASS.id];
                     for (let y = 0; y < CONFIG.WORLD_HEIGHT; y++) {
-                        if (this.world.getBlock(tx, y).id === BLOCKS.GRASS.id) {
-                            ty = y;
-                            break;
-                        }
+                        if (surfaceBlocks.includes(this.world.getBlock(tx, y).id)) { ty = y; break; }
                     }
-                    if (ty > 0 && Math.random() < 0.6) {
-                        this.world.generateTree(tx, ty);
+                    if (ty > 0 && Math.random() < biome.treeChance) {
+                        if (biome.cactus) this.world.generateCactus(tx, ty);
+                        else this.world.generateTree(tx, ty, biome.snowyTrees);
                     }
                 }
 
@@ -1339,6 +1412,55 @@
             ctx.arc(cx, cy, isDay ? 40 : 30, 0, Math.PI * 2);
             ctx.fill();
             ctx.shadowBlur = 0;
+
+            // Parallax clouds (scroll at 0.1x speed)
+            if (isDay) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                const cloudOffset = this.cameraX * 0.1;
+                for (let i = 0; i < 8; i++) {
+                    const seed = i * 12345;
+                    const baseX = ((seed % 2000) - cloudOffset) % (this.canvas.width + 200) - 100;
+                    const y = 40 + (seed * 7 % 80);
+                    const w = 60 + (seed * 3 % 80);
+                    ctx.beginPath();
+                    ctx.ellipse(baseX, y, w, 20, 0, 0, Math.PI * 2);
+                    ctx.ellipse(baseX - w * 0.4, y + 5, w * 0.6, 15, 0, 0, Math.PI * 2);
+                    ctx.ellipse(baseX + w * 0.4, y + 5, w * 0.5, 15, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // Parallax distant mountains (scroll at 0.2x speed)
+            const mountainOffset = this.cameraX * 0.2;
+            const mountainY = this.canvas.height * 0.5;
+            const mountainColor = isDay ? 'rgba(100, 120, 150, 0.4)' : 'rgba(30, 40, 60, 0.5)';
+            ctx.fillStyle = mountainColor;
+            ctx.beginPath();
+            ctx.moveTo(0, mountainY + 100);
+            for (let x = 0; x <= this.canvas.width + 100; x += 20) {
+                const worldX = x + mountainOffset;
+                const h = Math.sin(worldX * 0.01) * 40 + Math.sin(worldX * 0.023) * 25 + Math.sin(worldX * 0.007) * 60;
+                ctx.lineTo(x, mountainY - h);
+            }
+            ctx.lineTo(this.canvas.width, mountainY + 100);
+            ctx.closePath();
+            ctx.fill();
+
+            // Parallax closer hills (scroll at 0.35x speed)
+            const hillOffset = this.cameraX * 0.35;
+            const hillY = this.canvas.height * 0.6;
+            const hillColor = isDay ? 'rgba(80, 130, 80, 0.5)' : 'rgba(20, 50, 30, 0.6)';
+            ctx.fillStyle = hillColor;
+            ctx.beginPath();
+            ctx.moveTo(0, hillY + 80);
+            for (let x = 0; x <= this.canvas.width + 50; x += 15) {
+                const worldX = x + hillOffset;
+                const h = Math.sin(worldX * 0.015) * 30 + Math.sin(worldX * 0.031) * 20;
+                ctx.lineTo(x, hillY - h);
+            }
+            ctx.lineTo(this.canvas.width, hillY + 80);
+            ctx.closePath();
+            ctx.fill();
         }
 
         renderPlayer() {
