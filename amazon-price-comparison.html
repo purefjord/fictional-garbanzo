@@ -67,6 +67,34 @@
             font-size: 1.1rem;
         }
 
+        .server-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            padding: 6px 14px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--error);
+        }
+
+        .status-dot.online {
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
         .search-section {
             background: var(--card-bg);
             padding: 30px;
@@ -130,14 +158,19 @@
             gap: 8px;
         }
 
-        .btn:hover {
+        .btn:hover:not(:disabled) {
             background: var(--primary-dark);
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(255, 153, 0, 0.4);
         }
 
-        .btn:active {
+        .btn:active:not(:disabled) {
             transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
         }
 
         .btn-secondary {
@@ -145,9 +178,19 @@
             color: white;
         }
 
-        .btn-secondary:hover {
+        .btn-secondary:hover:not(:disabled) {
             background: #37475a;
             box-shadow: 0 4px 12px rgba(35, 47, 62, 0.4);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #059669;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
         }
 
         .stores-section {
@@ -158,11 +201,16 @@
             margin-bottom: 20px;
             color: var(--secondary-color);
             font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
         }
 
         .stores-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 20px;
         }
 
@@ -173,6 +221,7 @@
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
             transition: all 0.3s ease;
             border: 2px solid transparent;
+            position: relative;
         }
 
         .store-card:hover {
@@ -187,6 +236,34 @@
 
         .store-card.lowest-price .badge {
             display: inline-block;
+        }
+
+        .store-card.loading {
+            opacity: 0.7;
+        }
+
+        .store-card.loading::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .store-card.error {
+            border-color: var(--error);
+            background: linear-gradient(135deg, #fef2f2, #ffffff);
+        }
+
+        .store-card.unavailable {
+            border-color: var(--warning);
+            background: linear-gradient(135deg, #fffbeb, #ffffff);
         }
 
         .store-header {
@@ -226,55 +303,61 @@
             font-weight: 700;
         }
 
-        .price-input-group {
-            margin-bottom: 15px;
+        .badge.error-badge {
+            display: inline-block;
+            background: var(--error);
         }
 
-        .price-input-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 0.85rem;
-            color: var(--text-secondary);
+        .badge.unavailable-badge {
+            display: inline-block;
+            background: var(--warning);
         }
 
-        .price-input-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .currency-symbol {
-            font-weight: 700;
-            color: var(--text-secondary);
-            font-size: 1.1rem;
-            min-width: 30px;
-        }
-
-        .price-input {
-            flex: 1;
-            padding: 10px 14px;
-            border: 2px solid var(--border-color);
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-        }
-
-        .price-input:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(255, 153, 0, 0.15);
-        }
-
-        .converted-price {
+        .price-display {
             background: #f3f4f6;
-            padding: 12px 15px;
-            border-radius: 8px;
-            font-size: 0.95rem;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
-        .converted-price strong {
+        .price-display.fetching {
+            align-items: center;
+        }
+
+        .price-original {
+            font-size: 1.8rem;
+            font-weight: 700;
             color: var(--secondary-color);
-            font-size: 1.1rem;
+        }
+
+        .price-converted {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+
+        .price-error {
+            color: var(--error);
+            font-size: 0.9rem;
+        }
+
+        .price-unavailable {
+            color: var(--warning);
+            font-size: 0.9rem;
+        }
+
+        .product-title {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
 
         .store-link {
@@ -287,7 +370,6 @@
             border-radius: 8px;
             font-weight: 700;
             transition: all 0.3s ease;
-            margin-top: 10px;
         }
 
         .store-link:hover {
@@ -325,14 +407,20 @@
             color: var(--primary-color);
         }
 
-        .loading {
+        .loading-spinner {
             display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
+            width: 24px;
+            height: 24px;
+            border: 3px solid #e5e7eb;
             border-top: 3px solid var(--primary-color);
             border-radius: 50%;
             animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            margin-top: 10px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
         }
 
         @keyframes spin {
@@ -449,6 +537,40 @@
             border: 1px solid #fecaca;
         }
 
+        .status-message.warning {
+            display: block;
+            background: #fffbeb;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            margin-top: 15px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar.active {
+            display: block;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--primary-color);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .fetch-duration {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 10px;
+        }
+
         @media (max-width: 768px) {
             header h1 {
                 font-size: 1.6rem;
@@ -470,6 +592,11 @@
                 width: 100%;
                 justify-content: center;
             }
+
+            .stores-section h2 {
+                flex-direction: column;
+                align-items: flex-start;
+            }
         }
     </style>
 </head>
@@ -478,12 +605,16 @@
         <div class="container">
             <h1><span class="logo">🛒</span> Amazon EU Price Comparison</h1>
             <p>Compare prices across European Amazon stores and find the best deals</p>
+            <div class="server-status">
+                <span class="status-dot" id="serverStatusDot"></span>
+                <span id="serverStatusText">Checking server...</span>
+            </div>
         </div>
     </header>
 
     <div class="container">
         <div class="search-section">
-            <h2>🔍 Enter Product Details</h2>
+            <h2>🔍 Search for Product</h2>
             <div class="input-group">
                 <div class="input-wrapper">
                     <label for="asin">Amazon ASIN (Product ID)</label>
@@ -491,7 +622,7 @@
                 </div>
                 <div class="input-wrapper">
                     <label for="baseCurrency">Base Currency for Comparison</label>
-                    <select id="baseCurrency" class="price-input" style="cursor: pointer;">
+                    <select id="baseCurrency" class="price-input" style="cursor: pointer; padding: 14px 18px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 1rem;">
                         <option value="EUR">EUR (Euro)</option>
                         <option value="GBP">GBP (British Pound)</option>
                         <option value="SEK">SEK (Swedish Krona)</option>
@@ -500,16 +631,17 @@
                 </div>
             </div>
             <div style="margin-top: 20px; display: flex; gap: 15px; flex-wrap: wrap;">
-                <button class="btn" onclick="generateLinks()">
-                    <span>🔗</span> Generate Store Links
-                </button>
-                <button class="btn btn-secondary" onclick="compareAllPrices()">
-                    <span>📊</span> Compare Prices
+                <button class="btn btn-success" id="searchBtn" onclick="searchPrices()">
+                    <span>🔍</span> Search All Prices
                 </button>
                 <button class="btn btn-secondary" onclick="clearAll()">
                     <span>🗑️</span> Clear All
                 </button>
             </div>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-bar-fill" id="progressBarFill" style="width: 0%"></div>
+            </div>
+            <div class="fetch-duration" id="fetchDuration"></div>
         </div>
 
         <div id="statusMessage" class="status-message"></div>
@@ -517,11 +649,8 @@
         <div class="exchange-rates">
             <h2>💱 Live Exchange Rates (Base: EUR)</h2>
             <div id="ratesDisplay" class="rates-grid">
-                <div class="rate-item"><span class="loading"></span> Loading rates...</div>
+                <div class="rate-item"><span class="loading-spinner"></span></div>
             </div>
-            <p style="margin-top: 15px; font-size: 0.85rem; color: var(--text-secondary);">
-                Rates are fetched from exchangerate-api.com and updated regularly.
-            </p>
         </div>
 
         <div id="summarySection" class="summary-section">
@@ -543,15 +672,17 @@
                     <div class="subtext" id="savingsPercent">-</div>
                 </div>
                 <div class="summary-item">
-                    <label>Prices Compared</label>
+                    <label>Prices Found</label>
                     <div class="value" id="pricesCount">0</div>
-                    <div class="subtext">stores with prices</div>
+                    <div class="subtext">out of <span id="totalStores">9</span> stores</div>
                 </div>
             </div>
         </div>
 
         <div class="stores-section">
-            <h2>🇪🇺 European Amazon Stores</h2>
+            <h2>
+                <span>🇪🇺 European Amazon Stores</span>
+            </h2>
             <div class="stores-grid" id="storesGrid">
                 <!-- Store cards will be generated here -->
             </div>
@@ -560,11 +691,11 @@
         <div class="info-section">
             <h3>ℹ️ How to Use This Tool</h3>
             <ul>
+                <li><strong>Start the server:</strong> Run <code>npm install && npm start</code> in the project directory</li>
                 <li><strong>Find the ASIN:</strong> The ASIN is a 10-character product identifier found in the Amazon URL (e.g., amazon.de/dp/<strong>B09V3KXJPB</strong>)</li>
-                <li><strong>Generate Links:</strong> Click "Generate Store Links" to create direct links to the product on each European Amazon store</li>
-                <li><strong>Enter Prices:</strong> Visit each store link, note the price, and enter it in the corresponding field</li>
-                <li><strong>Compare:</strong> Click "Compare Prices" to see all prices converted to your base currency with a summary</li>
-                <li><strong>Note:</strong> Not all products are available in all stores. Some stores may redirect to a local version or show different pricing</li>
+                <li><strong>Search:</strong> Enter the ASIN and click "Search All Prices" to automatically fetch prices from all stores</li>
+                <li><strong>Compare:</strong> View the summary to see the best deal and potential savings</li>
+                <li><strong>Note:</strong> Some products may not be available in all stores. Fetching takes ~10-15 seconds due to rate limiting.</li>
             </ul>
         </div>
     </div>
@@ -574,6 +705,9 @@
     </footer>
 
     <script>
+        // API base URL - change this if running on a different port/host
+        const API_BASE = window.location.origin;
+
         // European Amazon stores configuration
         const STORES = [
             { id: 'de', name: 'Germany', domain: 'amazon.de', flag: '🇩🇪', currency: 'EUR', symbol: '€' },
@@ -582,7 +716,6 @@
             { id: 'es', name: 'Spain', domain: 'amazon.es', flag: '🇪🇸', currency: 'EUR', symbol: '€' },
             { id: 'nl', name: 'Netherlands', domain: 'amazon.nl', flag: '🇳🇱', currency: 'EUR', symbol: '€' },
             { id: 'be', name: 'Belgium', domain: 'amazon.com.be', flag: '🇧🇪', currency: 'EUR', symbol: '€' },
-            { id: 'at', name: 'Austria', domain: 'amazon.de', flag: '🇦🇹', currency: 'EUR', symbol: '€', note: 'Uses Amazon.de' },
             { id: 'uk', name: 'United Kingdom', domain: 'amazon.co.uk', flag: '🇬🇧', currency: 'GBP', symbol: '£' },
             { id: 'se', name: 'Sweden', domain: 'amazon.se', flag: '🇸🇪', currency: 'SEK', symbol: 'kr' },
             { id: 'pl', name: 'Poland', domain: 'amazon.pl', flag: '🇵🇱', currency: 'PLN', symbol: 'zł' },
@@ -596,13 +729,37 @@
             PLN: 4.35
         };
 
-        let currentASIN = '';
+        let serverOnline = false;
+        let currentResults = [];
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', () => {
             generateStoreCards();
+            checkServerStatus();
             fetchExchangeRates();
+            document.getElementById('totalStores').textContent = STORES.length;
         });
+
+        // Check if backend server is running
+        async function checkServerStatus() {
+            const dot = document.getElementById('serverStatusDot');
+            const text = document.getElementById('serverStatusText');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/health`, { timeout: 5000 });
+                if (response.ok) {
+                    dot.classList.add('online');
+                    text.textContent = 'Server online - Auto-fetch enabled';
+                    serverOnline = true;
+                } else {
+                    throw new Error('Server not responding');
+                }
+            } catch (error) {
+                dot.classList.remove('online');
+                text.textContent = 'Server offline - Start with: npm start';
+                serverOnline = false;
+            }
+        }
 
         // Generate store cards
         function generateStoreCards() {
@@ -619,25 +776,16 @@
                             <span class="store-flag">${store.flag}</span>
                             <div>
                                 <div class="store-name">${store.name}</div>
-                                <div class="store-domain">${store.domain}${store.note ? ` (${store.note})` : ''}</div>
+                                <div class="store-domain">${store.domain}</div>
                             </div>
                         </div>
-                        <span class="badge">Best Price!</span>
+                        <span class="badge" id="badge-${store.id}">Best Price!</span>
                     </div>
-                    <div class="price-input-group">
-                        <label>Price in ${store.currency}</label>
-                        <div class="price-input-wrapper">
-                            <span class="currency-symbol">${store.symbol}</span>
-                            <input type="number" class="price-input" id="price-${store.id}"
-                                   placeholder="Enter price" step="0.01" min="0"
-                                   onchange="updateConversion('${store.id}')">
-                        </div>
-                    </div>
-                    <div class="converted-price" id="converted-${store.id}">
-                        Converted: <strong>-</strong>
+                    <div class="price-display" id="price-display-${store.id}">
+                        <div style="color: var(--text-secondary);">Enter ASIN and search</div>
                     </div>
                     <a href="#" class="store-link" id="link-${store.id}" target="_blank" rel="noopener noreferrer">
-                        Enter ASIN to generate link
+                        View on ${store.domain}
                     </a>
                 `;
                 grid.appendChild(card);
@@ -649,7 +797,6 @@
             const ratesDisplay = document.getElementById('ratesDisplay');
 
             try {
-                // Using exchangerate-api.com free tier
                 const response = await fetch('https://api.exchangerate-api.com/v4/latest/EUR');
 
                 if (!response.ok) {
@@ -666,16 +813,14 @@
                 };
 
                 displayRates();
-                showStatus('Exchange rates updated successfully!', 'success');
 
             } catch (error) {
                 console.error('Error fetching exchange rates:', error);
-                // Use fallback rates
                 ratesDisplay.innerHTML = `
                     <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.GBP.toFixed(4)} GBP</div>
-                    <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.SEK.toFixed(4)} SEK</div>
+                    <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.SEK.toFixed(2)} SEK</div>
                     <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.PLN.toFixed(4)} PLN</div>
-                    <div class="rate-item" style="color: #d97706;">⚠️ Using fallback rates (API unavailable)</div>
+                    <div class="rate-item" style="color: #d97706;">⚠️ Using fallback rates</div>
                 `;
             }
         }
@@ -683,19 +828,17 @@
         // Display exchange rates
         function displayRates() {
             const ratesDisplay = document.getElementById('ratesDisplay');
-            const lastUpdate = new Date().toLocaleTimeString();
-
             ratesDisplay.innerHTML = `
                 <div class="rate-item"><strong>1 EUR</strong> = 1.0000 EUR</div>
                 <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.GBP.toFixed(4)} GBP</div>
                 <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.SEK.toFixed(2)} SEK</div>
                 <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.PLN.toFixed(4)} PLN</div>
-                <div class="rate-item" style="background: #ecfdf5; color: #065f46;">✓ Updated at ${lastUpdate}</div>
+                <div class="rate-item" style="background: #ecfdf5; color: #065f46;">✓ Live rates</div>
             `;
         }
 
-        // Generate links for all stores
-        function generateLinks() {
+        // Search prices from all stores
+        async function searchPrices() {
             const asinInput = document.getElementById('asin');
             const asin = asinInput.value.trim().toUpperCase();
 
@@ -709,38 +852,213 @@
                 return;
             }
 
-            currentASIN = asin;
+            // Check server status first
+            await checkServerStatus();
 
-            STORES.forEach(store => {
-                const link = document.getElementById(`link-${store.id}`);
-                const productUrl = `https://www.${store.domain}/dp/${asin}`;
-                link.href = productUrl;
-                link.textContent = `Open on ${store.domain}`;
-            });
-
-            showStatus(`Links generated for ASIN: ${asin}. Click on store links to check prices.`, 'success');
-        }
-
-        // Update conversion for a single store
-        function updateConversion(storeId) {
-            const store = STORES.find(s => s.id === storeId);
-            const priceInput = document.getElementById(`price-${storeId}`);
-            const convertedDisplay = document.getElementById(`converted-${storeId}`);
-            const baseCurrency = document.getElementById('baseCurrency').value;
-
-            const price = parseFloat(priceInput.value);
-
-            if (isNaN(price) || price <= 0) {
-                convertedDisplay.innerHTML = 'Converted: <strong>-</strong>';
+            if (!serverOnline) {
+                showStatus('Server is offline. Please start the server with: npm install && npm start', 'error');
                 return;
             }
 
-            // Convert to EUR first, then to base currency
-            const priceInEUR = price / exchangeRates[store.currency];
-            const priceInBase = priceInEUR * exchangeRates[baseCurrency];
+            // Update UI to show loading state
+            const searchBtn = document.getElementById('searchBtn');
+            searchBtn.disabled = true;
+            searchBtn.innerHTML = '<span class="loading-spinner"></span> Searching...';
 
+            const progressBar = document.getElementById('progressBar');
+            const progressBarFill = document.getElementById('progressBarFill');
+            progressBar.classList.add('active');
+            progressBarFill.style.width = '0%';
+
+            // Reset all store cards to loading state
+            STORES.forEach(store => {
+                const card = document.getElementById(`store-${store.id}`);
+                const priceDisplay = document.getElementById(`price-display-${store.id}`);
+                const badge = document.getElementById(`badge-${store.id}`);
+                const link = document.getElementById(`link-${store.id}`);
+
+                card.className = 'store-card loading';
+                badge.className = 'badge';
+                priceDisplay.className = 'price-display fetching';
+                priceDisplay.innerHTML = `
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Fetching price...</div>
+                `;
+                link.href = `https://www.${store.domain}/dp/${asin}`;
+            });
+
+            // Animate progress bar
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += Math.random() * 15;
+                if (progress > 90) progress = 90;
+                progressBarFill.style.width = `${progress}%`;
+            }, 500);
+
+            const startTime = Date.now();
+
+            try {
+                showStatus(`Fetching prices for ASIN: ${asin}...`, 'warning');
+
+                const response = await fetch(`${API_BASE}/api/prices/${asin}`);
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                currentResults = data.results;
+
+                // Complete progress bar
+                clearInterval(progressInterval);
+                progressBarFill.style.width = '100%';
+
+                const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+                document.getElementById('fetchDuration').textContent = `Completed in ${duration}s`;
+
+                // Update store cards with results
+                updateStoreCards(data.results);
+
+                // Calculate and show summary
+                showSummary(data.results);
+
+                const pricesFound = data.results.filter(r => r.price !== null).length;
+                showStatus(`Found prices from ${pricesFound} out of ${STORES.length} stores!`, 'success');
+
+            } catch (error) {
+                console.error('Error fetching prices:', error);
+                clearInterval(progressInterval);
+                progressBarFill.style.width = '0%';
+                showStatus(`Failed to fetch prices: ${error.message}`, 'error');
+
+                // Reset cards to error state
+                STORES.forEach(store => {
+                    const card = document.getElementById(`store-${store.id}`);
+                    const priceDisplay = document.getElementById(`price-display-${store.id}`);
+                    card.className = 'store-card error';
+                    priceDisplay.className = 'price-display';
+                    priceDisplay.innerHTML = `<div class="price-error">Failed to fetch</div>`;
+                });
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = '<span>🔍</span> Search All Prices';
+                setTimeout(() => {
+                    progressBar.classList.remove('active');
+                }, 1000);
+            }
+        }
+
+        // Update store cards with fetched results
+        function updateStoreCards(results) {
+            const baseCurrency = document.getElementById('baseCurrency').value;
             const symbol = getSymbolForCurrency(baseCurrency);
-            convertedDisplay.innerHTML = `Converted: <strong>${symbol}${priceInBase.toFixed(2)} ${baseCurrency}</strong>`;
+
+            // Find lowest price for highlighting
+            const pricesWithValues = results.filter(r => r.price !== null);
+            let lowestPriceEUR = Infinity;
+            if (pricesWithValues.length > 0) {
+                pricesWithValues.forEach(r => {
+                    const priceInEUR = r.price / exchangeRates[r.currency];
+                    if (priceInEUR < lowestPriceEUR) {
+                        lowestPriceEUR = priceInEUR;
+                    }
+                });
+            }
+
+            results.forEach(result => {
+                const card = document.getElementById(`store-${result.store}`);
+                const priceDisplay = document.getElementById(`price-display-${result.store}`);
+                const badge = document.getElementById(`badge-${result.store}`);
+
+                if (!card) return;
+
+                card.className = 'store-card';
+                priceDisplay.className = 'price-display';
+
+                if (result.error) {
+                    card.classList.add('error');
+                    badge.className = 'badge error-badge';
+                    badge.textContent = 'Error';
+                    priceDisplay.innerHTML = `<div class="price-error">⚠️ ${result.error}</div>`;
+                } else if (!result.available || result.price === null) {
+                    card.classList.add('unavailable');
+                    badge.className = 'badge unavailable-badge';
+                    badge.textContent = 'Unavailable';
+                    priceDisplay.innerHTML = `<div class="price-unavailable">Product not available or price not found</div>`;
+                } else {
+                    // Convert price to base currency
+                    const priceInEUR = result.price / exchangeRates[result.currency];
+                    const priceInBase = priceInEUR * exchangeRates[baseCurrency];
+
+                    // Check if this is the lowest price
+                    if (Math.abs(priceInEUR - lowestPriceEUR) < 0.01) {
+                        card.classList.add('lowest-price');
+                        badge.className = 'badge';
+                        badge.style.display = 'inline-block';
+                        badge.textContent = 'Best Price!';
+                    } else {
+                        badge.className = 'badge';
+                        badge.style.display = 'none';
+                    }
+
+                    let html = `
+                        <div class="price-original">${result.symbol}${result.price.toFixed(2)}</div>
+                        <div class="price-converted">≈ ${symbol}${priceInBase.toFixed(2)} ${baseCurrency}</div>
+                    `;
+
+                    if (result.title) {
+                        html += `<div class="product-title">${result.title}</div>`;
+                    }
+
+                    priceDisplay.innerHTML = html;
+                }
+            });
+        }
+
+        // Show price comparison summary
+        function showSummary(results) {
+            const baseCurrency = document.getElementById('baseCurrency').value;
+            const symbol = getSymbolForCurrency(baseCurrency);
+
+            const pricesWithValues = results
+                .filter(r => r.price !== null)
+                .map(r => {
+                    const store = STORES.find(s => s.id === r.store);
+                    const priceInEUR = r.price / exchangeRates[r.currency];
+                    const priceInBase = priceInEUR * exchangeRates[baseCurrency];
+                    return {
+                        ...r,
+                        storeData: store,
+                        priceInBase: priceInBase
+                    };
+                })
+                .sort((a, b) => a.priceInBase - b.priceInBase);
+
+            if (pricesWithValues.length === 0) {
+                document.getElementById('summarySection').classList.remove('visible');
+                return;
+            }
+
+            const lowest = pricesWithValues[0];
+            const highest = pricesWithValues[pricesWithValues.length - 1];
+            const savings = highest.priceInBase - lowest.priceInBase;
+            const savingsPercent = pricesWithValues.length > 1
+                ? ((savings / highest.priceInBase) * 100).toFixed(1)
+                : 0;
+
+            document.getElementById('summarySection').classList.add('visible');
+            document.getElementById('lowestPrice').textContent = `${symbol}${lowest.priceInBase.toFixed(2)}`;
+            document.getElementById('lowestStore').textContent = `${lowest.storeData.flag} ${lowest.storeData.name}`;
+            document.getElementById('highestPrice').textContent = `${symbol}${highest.priceInBase.toFixed(2)}`;
+            document.getElementById('highestStore').textContent = `${highest.storeData.flag} ${highest.storeData.name}`;
+            document.getElementById('savingsAmount').textContent = `${symbol}${savings.toFixed(2)}`;
+            document.getElementById('savingsPercent').textContent = pricesWithValues.length > 1
+                ? `${savingsPercent}% cheaper at best store`
+                : 'Only one price found';
+            document.getElementById('pricesCount').textContent = pricesWithValues.length;
+
+            // Scroll to summary
+            document.getElementById('summarySection').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         // Get currency symbol
@@ -749,89 +1067,27 @@
             return symbols[currency] || '';
         }
 
-        // Compare all prices
-        function compareAllPrices() {
-            const baseCurrency = document.getElementById('baseCurrency').value;
-            const symbol = getSymbolForCurrency(baseCurrency);
-
-            const prices = [];
-
-            STORES.forEach(store => {
-                const priceInput = document.getElementById(`price-${store.id}`);
-                const price = parseFloat(priceInput.value);
-                const card = document.getElementById(`store-${store.id}`);
-
-                // Remove previous highlighting
-                card.classList.remove('lowest-price');
-
-                if (!isNaN(price) && price > 0) {
-                    // Convert to base currency
-                    const priceInEUR = price / exchangeRates[store.currency];
-                    const priceInBase = priceInEUR * exchangeRates[baseCurrency];
-
-                    prices.push({
-                        store: store,
-                        originalPrice: price,
-                        convertedPrice: priceInBase
-                    });
-
-                    // Update conversion display
-                    updateConversion(store.id);
-                }
-            });
-
-            if (prices.length === 0) {
-                showStatus('Please enter at least one price to compare.', 'error');
-                return;
-            }
-
-            // Sort by converted price
-            prices.sort((a, b) => a.convertedPrice - b.convertedPrice);
-
-            const lowest = prices[0];
-            const highest = prices[prices.length - 1];
-            const savings = highest.convertedPrice - lowest.convertedPrice;
-            const savingsPercent = (savings / highest.convertedPrice * 100).toFixed(1);
-
-            // Highlight lowest price card
-            const lowestCard = document.getElementById(`store-${lowest.store.id}`);
-            lowestCard.classList.add('lowest-price');
-
-            // Update summary section
-            document.getElementById('summarySection').classList.add('visible');
-            document.getElementById('lowestPrice').textContent = `${symbol}${lowest.convertedPrice.toFixed(2)}`;
-            document.getElementById('lowestStore').textContent = `${lowest.store.flag} ${lowest.store.name}`;
-            document.getElementById('highestPrice').textContent = `${symbol}${highest.convertedPrice.toFixed(2)}`;
-            document.getElementById('highestStore').textContent = `${highest.store.flag} ${highest.store.name}`;
-            document.getElementById('savingsAmount').textContent = `${symbol}${savings.toFixed(2)}`;
-            document.getElementById('savingsPercent').textContent = `${savingsPercent}% cheaper at best store`;
-            document.getElementById('pricesCount').textContent = prices.length;
-
-            // Scroll to summary
-            document.getElementById('summarySection').scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-            showStatus(`Compared ${prices.length} prices. Best deal found at ${lowest.store.name}!`, 'success');
-        }
-
-        // Clear all inputs
+        // Clear all data
         function clearAll() {
             document.getElementById('asin').value = '';
-            currentASIN = '';
+            document.getElementById('summarySection').classList.remove('visible');
+            document.getElementById('fetchDuration').textContent = '';
+            document.getElementById('progressBar').classList.remove('active');
+            currentResults = [];
 
             STORES.forEach(store => {
-                const priceInput = document.getElementById(`price-${store.id}`);
-                const convertedDisplay = document.getElementById(`converted-${store.id}`);
-                const link = document.getElementById(`link-${store.id}`);
                 const card = document.getElementById(`store-${store.id}`);
+                const priceDisplay = document.getElementById(`price-display-${store.id}`);
+                const badge = document.getElementById(`badge-${store.id}`);
+                const link = document.getElementById(`link-${store.id}`);
 
-                priceInput.value = '';
-                convertedDisplay.innerHTML = 'Converted: <strong>-</strong>';
+                card.className = 'store-card';
+                badge.className = 'badge';
+                priceDisplay.className = 'price-display';
+                priceDisplay.innerHTML = `<div style="color: var(--text-secondary);">Enter ASIN and search</div>`;
                 link.href = '#';
-                link.textContent = 'Enter ASIN to generate link';
-                card.classList.remove('lowest-price');
             });
 
-            document.getElementById('summarySection').classList.remove('visible');
             showStatus('All data cleared.', 'success');
         }
 
@@ -841,25 +1097,30 @@
             statusEl.textContent = message;
             statusEl.className = `status-message ${type}`;
 
-            // Auto-hide after 5 seconds
-            setTimeout(() => {
-                statusEl.className = 'status-message';
-            }, 5000);
+            if (type !== 'warning') {
+                setTimeout(() => {
+                    statusEl.className = 'status-message';
+                }, 5000);
+            }
         }
 
         // Handle Enter key in ASIN input
         document.getElementById('asin').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                generateLinks();
+                searchPrices();
             }
         });
 
-        // Update all conversions when base currency changes
+        // Update all prices when base currency changes
         document.getElementById('baseCurrency').addEventListener('change', () => {
-            STORES.forEach(store => {
-                updateConversion(store.id);
-            });
+            if (currentResults.length > 0) {
+                updateStoreCards(currentResults);
+                showSummary(currentResults);
+            }
         });
+
+        // Periodically check server status
+        setInterval(checkServerStatus, 30000);
     </script>
 </body>
 </html>
