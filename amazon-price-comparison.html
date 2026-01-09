@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon EU Price Comparison Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #ff9900;
+            --primary-dark: #e68a00;
+            --secondary-color: #232f3e;
+            --background: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-primary: #1a1a2e;
+            --text-secondary: #6b7280;
+            --border-color: #e5e7eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--secondary-color), #37475a);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+            margin-bottom: 30px;
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        header h1 {
+            font-size: 2.2rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        header h1 .logo {
+            font-size: 2.5rem;
+        }
+
+        header p {
+            color: #d1d5db;
+            font-size: 1.1rem;
+        }
+
+        .search-section {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
+        }
+
+        .search-section h2 {
+            margin-bottom: 20px;
+            color: var(--secondary-color);
+            font-size: 1.3rem;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .input-wrapper label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .input-wrapper input {
+            width: 100%;
+            padding: 14px 18px;
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .input-wrapper input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 4px rgba(255, 153, 0, 0.15);
+        }
+
+        .btn {
+            padding: 14px 30px;
+            background: var(--primary-color);
+            color: var(--secondary-color);
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 153, 0, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: var(--secondary-color);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #37475a;
+            box-shadow: 0 4px 12px rgba(35, 47, 62, 0.4);
+        }
+
+        .stores-section {
+            margin-bottom: 30px;
+        }
+
+        .stores-section h2 {
+            margin-bottom: 20px;
+            color: var(--secondary-color);
+            font-size: 1.3rem;
+        }
+
+        .stores-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .store-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .store-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+        }
+
+        .store-card.lowest-price {
+            border-color: var(--success);
+            background: linear-gradient(135deg, #ecfdf5, #ffffff);
+        }
+
+        .store-card.lowest-price .badge {
+            display: inline-block;
+        }
+
+        .store-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .store-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .store-flag {
+            font-size: 2rem;
+        }
+
+        .store-name {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .store-domain {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .badge {
+            display: none;
+            background: var(--success);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .price-input-group {
+            margin-bottom: 15px;
+        }
+
+        .price-input-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .price-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .currency-symbol {
+            font-weight: 700;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            min-width: 30px;
+        }
+
+        .price-input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .price-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(255, 153, 0, 0.15);
+        }
+
+        .converted-price {
+            background: #f3f4f6;
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+
+        .converted-price strong {
+            color: var(--secondary-color);
+            font-size: 1.1rem;
+        }
+
+        .store-link {
+            display: block;
+            text-align: center;
+            padding: 12px;
+            background: var(--primary-color);
+            color: var(--secondary-color);
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 700;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .store-link:hover {
+            background: var(--primary-dark);
+        }
+
+        .exchange-rates {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
+        }
+
+        .exchange-rates h2 {
+            margin-bottom: 15px;
+            color: var(--secondary-color);
+            font-size: 1.2rem;
+        }
+
+        .rates-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .rate-item {
+            background: #f9fafb;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .rate-item strong {
+            color: var(--primary-color);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .summary-section {
+            background: linear-gradient(135deg, var(--secondary-color), #37475a);
+            color: white;
+            padding: 25px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            display: none;
+        }
+
+        .summary-section.visible {
+            display: block;
+        }
+
+        .summary-section h2 {
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .summary-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 12px;
+        }
+
+        .summary-item label {
+            display: block;
+            font-size: 0.85rem;
+            color: #d1d5db;
+            margin-bottom: 8px;
+        }
+
+        .summary-item .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .summary-item .subtext {
+            font-size: 0.85rem;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+
+        .info-section {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        .info-section h3 {
+            margin-bottom: 15px;
+            color: var(--secondary-color);
+        }
+
+        .info-section ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .info-section li {
+            padding: 8px 0;
+            padding-left: 25px;
+            position: relative;
+            color: var(--text-secondary);
+        }
+
+        .info-section li::before {
+            content: ">";
+            position: absolute;
+            left: 0;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .status-message {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .status-message.success {
+            display: block;
+            background: #ecfdf5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        .status-message.error {
+            display: block;
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.6rem;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
+            .search-section {
+                padding: 20px;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><span class="logo">🛒</span> Amazon EU Price Comparison</h1>
+            <p>Compare prices across European Amazon stores and find the best deals</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="search-section">
+            <h2>🔍 Enter Product Details</h2>
+            <div class="input-group">
+                <div class="input-wrapper">
+                    <label for="asin">Amazon ASIN (Product ID)</label>
+                    <input type="text" id="asin" placeholder="e.g., B09V3KXJPB" maxlength="10">
+                </div>
+                <div class="input-wrapper">
+                    <label for="baseCurrency">Base Currency for Comparison</label>
+                    <select id="baseCurrency" class="price-input" style="cursor: pointer;">
+                        <option value="EUR">EUR (Euro)</option>
+                        <option value="GBP">GBP (British Pound)</option>
+                        <option value="SEK">SEK (Swedish Krona)</option>
+                        <option value="PLN">PLN (Polish Zloty)</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 15px; flex-wrap: wrap;">
+                <button class="btn" onclick="generateLinks()">
+                    <span>🔗</span> Generate Store Links
+                </button>
+                <button class="btn btn-secondary" onclick="compareAllPrices()">
+                    <span>📊</span> Compare Prices
+                </button>
+                <button class="btn btn-secondary" onclick="clearAll()">
+                    <span>🗑️</span> Clear All
+                </button>
+            </div>
+        </div>
+
+        <div id="statusMessage" class="status-message"></div>
+
+        <div class="exchange-rates">
+            <h2>💱 Live Exchange Rates (Base: EUR)</h2>
+            <div id="ratesDisplay" class="rates-grid">
+                <div class="rate-item"><span class="loading"></span> Loading rates...</div>
+            </div>
+            <p style="margin-top: 15px; font-size: 0.85rem; color: var(--text-secondary);">
+                Rates are fetched from exchangerate-api.com and updated regularly.
+            </p>
+        </div>
+
+        <div id="summarySection" class="summary-section">
+            <h2>📈 Price Comparison Summary</h2>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <label>Lowest Price</label>
+                    <div class="value" id="lowestPrice">-</div>
+                    <div class="subtext" id="lowestStore">-</div>
+                </div>
+                <div class="summary-item">
+                    <label>Highest Price</label>
+                    <div class="value" id="highestPrice">-</div>
+                    <div class="subtext" id="highestStore">-</div>
+                </div>
+                <div class="summary-item">
+                    <label>Potential Savings</label>
+                    <div class="value" id="savingsAmount">-</div>
+                    <div class="subtext" id="savingsPercent">-</div>
+                </div>
+                <div class="summary-item">
+                    <label>Prices Compared</label>
+                    <div class="value" id="pricesCount">0</div>
+                    <div class="subtext">stores with prices</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stores-section">
+            <h2>🇪🇺 European Amazon Stores</h2>
+            <div class="stores-grid" id="storesGrid">
+                <!-- Store cards will be generated here -->
+            </div>
+        </div>
+
+        <div class="info-section">
+            <h3>ℹ️ How to Use This Tool</h3>
+            <ul>
+                <li><strong>Find the ASIN:</strong> The ASIN is a 10-character product identifier found in the Amazon URL (e.g., amazon.de/dp/<strong>B09V3KXJPB</strong>)</li>
+                <li><strong>Generate Links:</strong> Click "Generate Store Links" to create direct links to the product on each European Amazon store</li>
+                <li><strong>Enter Prices:</strong> Visit each store link, note the price, and enter it in the corresponding field</li>
+                <li><strong>Compare:</strong> Click "Compare Prices" to see all prices converted to your base currency with a summary</li>
+                <li><strong>Note:</strong> Not all products are available in all stores. Some stores may redirect to a local version or show different pricing</li>
+            </ul>
+        </div>
+    </div>
+
+    <footer>
+        <p>Amazon EU Price Comparison Tool | Prices and availability may vary | Not affiliated with Amazon</p>
+    </footer>
+
+    <script>
+        // European Amazon stores configuration
+        const STORES = [
+            { id: 'de', name: 'Germany', domain: 'amazon.de', flag: '🇩🇪', currency: 'EUR', symbol: '€' },
+            { id: 'fr', name: 'France', domain: 'amazon.fr', flag: '🇫🇷', currency: 'EUR', symbol: '€' },
+            { id: 'it', name: 'Italy', domain: 'amazon.it', flag: '🇮🇹', currency: 'EUR', symbol: '€' },
+            { id: 'es', name: 'Spain', domain: 'amazon.es', flag: '🇪🇸', currency: 'EUR', symbol: '€' },
+            { id: 'nl', name: 'Netherlands', domain: 'amazon.nl', flag: '🇳🇱', currency: 'EUR', symbol: '€' },
+            { id: 'be', name: 'Belgium', domain: 'amazon.com.be', flag: '🇧🇪', currency: 'EUR', symbol: '€' },
+            { id: 'at', name: 'Austria', domain: 'amazon.de', flag: '🇦🇹', currency: 'EUR', symbol: '€', note: 'Uses Amazon.de' },
+            { id: 'uk', name: 'United Kingdom', domain: 'amazon.co.uk', flag: '🇬🇧', currency: 'GBP', symbol: '£' },
+            { id: 'se', name: 'Sweden', domain: 'amazon.se', flag: '🇸🇪', currency: 'SEK', symbol: 'kr' },
+            { id: 'pl', name: 'Poland', domain: 'amazon.pl', flag: '🇵🇱', currency: 'PLN', symbol: 'zł' },
+        ];
+
+        // Exchange rates (will be updated from API)
+        let exchangeRates = {
+            EUR: 1,
+            GBP: 0.86,
+            SEK: 11.5,
+            PLN: 4.35
+        };
+
+        let currentASIN = '';
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            generateStoreCards();
+            fetchExchangeRates();
+        });
+
+        // Generate store cards
+        function generateStoreCards() {
+            const grid = document.getElementById('storesGrid');
+            grid.innerHTML = '';
+
+            STORES.forEach(store => {
+                const card = document.createElement('div');
+                card.className = 'store-card';
+                card.id = `store-${store.id}`;
+                card.innerHTML = `
+                    <div class="store-header">
+                        <div class="store-info">
+                            <span class="store-flag">${store.flag}</span>
+                            <div>
+                                <div class="store-name">${store.name}</div>
+                                <div class="store-domain">${store.domain}${store.note ? ` (${store.note})` : ''}</div>
+                            </div>
+                        </div>
+                        <span class="badge">Best Price!</span>
+                    </div>
+                    <div class="price-input-group">
+                        <label>Price in ${store.currency}</label>
+                        <div class="price-input-wrapper">
+                            <span class="currency-symbol">${store.symbol}</span>
+                            <input type="number" class="price-input" id="price-${store.id}"
+                                   placeholder="Enter price" step="0.01" min="0"
+                                   onchange="updateConversion('${store.id}')">
+                        </div>
+                    </div>
+                    <div class="converted-price" id="converted-${store.id}">
+                        Converted: <strong>-</strong>
+                    </div>
+                    <a href="#" class="store-link" id="link-${store.id}" target="_blank" rel="noopener noreferrer">
+                        Enter ASIN to generate link
+                    </a>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Fetch live exchange rates
+        async function fetchExchangeRates() {
+            const ratesDisplay = document.getElementById('ratesDisplay');
+
+            try {
+                // Using exchangerate-api.com free tier
+                const response = await fetch('https://api.exchangerate-api.com/v4/latest/EUR');
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch exchange rates');
+                }
+
+                const data = await response.json();
+
+                exchangeRates = {
+                    EUR: 1,
+                    GBP: data.rates.GBP,
+                    SEK: data.rates.SEK,
+                    PLN: data.rates.PLN
+                };
+
+                displayRates();
+                showStatus('Exchange rates updated successfully!', 'success');
+
+            } catch (error) {
+                console.error('Error fetching exchange rates:', error);
+                // Use fallback rates
+                ratesDisplay.innerHTML = `
+                    <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.GBP.toFixed(4)} GBP</div>
+                    <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.SEK.toFixed(4)} SEK</div>
+                    <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.PLN.toFixed(4)} PLN</div>
+                    <div class="rate-item" style="color: #d97706;">⚠️ Using fallback rates (API unavailable)</div>
+                `;
+            }
+        }
+
+        // Display exchange rates
+        function displayRates() {
+            const ratesDisplay = document.getElementById('ratesDisplay');
+            const lastUpdate = new Date().toLocaleTimeString();
+
+            ratesDisplay.innerHTML = `
+                <div class="rate-item"><strong>1 EUR</strong> = 1.0000 EUR</div>
+                <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.GBP.toFixed(4)} GBP</div>
+                <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.SEK.toFixed(2)} SEK</div>
+                <div class="rate-item"><strong>1 EUR</strong> = ${exchangeRates.PLN.toFixed(4)} PLN</div>
+                <div class="rate-item" style="background: #ecfdf5; color: #065f46;">✓ Updated at ${lastUpdate}</div>
+            `;
+        }
+
+        // Generate links for all stores
+        function generateLinks() {
+            const asinInput = document.getElementById('asin');
+            const asin = asinInput.value.trim().toUpperCase();
+
+            if (!asin) {
+                showStatus('Please enter a valid ASIN (Amazon product ID)', 'error');
+                return;
+            }
+
+            if (!/^[A-Z0-9]{10}$/.test(asin)) {
+                showStatus('Invalid ASIN format. ASIN should be exactly 10 alphanumeric characters.', 'error');
+                return;
+            }
+
+            currentASIN = asin;
+
+            STORES.forEach(store => {
+                const link = document.getElementById(`link-${store.id}`);
+                const productUrl = `https://www.${store.domain}/dp/${asin}`;
+                link.href = productUrl;
+                link.textContent = `Open on ${store.domain}`;
+            });
+
+            showStatus(`Links generated for ASIN: ${asin}. Click on store links to check prices.`, 'success');
+        }
+
+        // Update conversion for a single store
+        function updateConversion(storeId) {
+            const store = STORES.find(s => s.id === storeId);
+            const priceInput = document.getElementById(`price-${storeId}`);
+            const convertedDisplay = document.getElementById(`converted-${storeId}`);
+            const baseCurrency = document.getElementById('baseCurrency').value;
+
+            const price = parseFloat(priceInput.value);
+
+            if (isNaN(price) || price <= 0) {
+                convertedDisplay.innerHTML = 'Converted: <strong>-</strong>';
+                return;
+            }
+
+            // Convert to EUR first, then to base currency
+            const priceInEUR = price / exchangeRates[store.currency];
+            const priceInBase = priceInEUR * exchangeRates[baseCurrency];
+
+            const symbol = getSymbolForCurrency(baseCurrency);
+            convertedDisplay.innerHTML = `Converted: <strong>${symbol}${priceInBase.toFixed(2)} ${baseCurrency}</strong>`;
+        }
+
+        // Get currency symbol
+        function getSymbolForCurrency(currency) {
+            const symbols = { EUR: '€', GBP: '£', SEK: 'kr ', PLN: 'zł ' };
+            return symbols[currency] || '';
+        }
+
+        // Compare all prices
+        function compareAllPrices() {
+            const baseCurrency = document.getElementById('baseCurrency').value;
+            const symbol = getSymbolForCurrency(baseCurrency);
+
+            const prices = [];
+
+            STORES.forEach(store => {
+                const priceInput = document.getElementById(`price-${store.id}`);
+                const price = parseFloat(priceInput.value);
+                const card = document.getElementById(`store-${store.id}`);
+
+                // Remove previous highlighting
+                card.classList.remove('lowest-price');
+
+                if (!isNaN(price) && price > 0) {
+                    // Convert to base currency
+                    const priceInEUR = price / exchangeRates[store.currency];
+                    const priceInBase = priceInEUR * exchangeRates[baseCurrency];
+
+                    prices.push({
+                        store: store,
+                        originalPrice: price,
+                        convertedPrice: priceInBase
+                    });
+
+                    // Update conversion display
+                    updateConversion(store.id);
+                }
+            });
+
+            if (prices.length === 0) {
+                showStatus('Please enter at least one price to compare.', 'error');
+                return;
+            }
+
+            // Sort by converted price
+            prices.sort((a, b) => a.convertedPrice - b.convertedPrice);
+
+            const lowest = prices[0];
+            const highest = prices[prices.length - 1];
+            const savings = highest.convertedPrice - lowest.convertedPrice;
+            const savingsPercent = (savings / highest.convertedPrice * 100).toFixed(1);
+
+            // Highlight lowest price card
+            const lowestCard = document.getElementById(`store-${lowest.store.id}`);
+            lowestCard.classList.add('lowest-price');
+
+            // Update summary section
+            document.getElementById('summarySection').classList.add('visible');
+            document.getElementById('lowestPrice').textContent = `${symbol}${lowest.convertedPrice.toFixed(2)}`;
+            document.getElementById('lowestStore').textContent = `${lowest.store.flag} ${lowest.store.name}`;
+            document.getElementById('highestPrice').textContent = `${symbol}${highest.convertedPrice.toFixed(2)}`;
+            document.getElementById('highestStore').textContent = `${highest.store.flag} ${highest.store.name}`;
+            document.getElementById('savingsAmount').textContent = `${symbol}${savings.toFixed(2)}`;
+            document.getElementById('savingsPercent').textContent = `${savingsPercent}% cheaper at best store`;
+            document.getElementById('pricesCount').textContent = prices.length;
+
+            // Scroll to summary
+            document.getElementById('summarySection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            showStatus(`Compared ${prices.length} prices. Best deal found at ${lowest.store.name}!`, 'success');
+        }
+
+        // Clear all inputs
+        function clearAll() {
+            document.getElementById('asin').value = '';
+            currentASIN = '';
+
+            STORES.forEach(store => {
+                const priceInput = document.getElementById(`price-${store.id}`);
+                const convertedDisplay = document.getElementById(`converted-${store.id}`);
+                const link = document.getElementById(`link-${store.id}`);
+                const card = document.getElementById(`store-${store.id}`);
+
+                priceInput.value = '';
+                convertedDisplay.innerHTML = 'Converted: <strong>-</strong>';
+                link.href = '#';
+                link.textContent = 'Enter ASIN to generate link';
+                card.classList.remove('lowest-price');
+            });
+
+            document.getElementById('summarySection').classList.remove('visible');
+            showStatus('All data cleared.', 'success');
+        }
+
+        // Show status message
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.className = `status-message ${type}`;
+
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                statusEl.className = 'status-message';
+            }, 5000);
+        }
+
+        // Handle Enter key in ASIN input
+        document.getElementById('asin').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                generateLinks();
+            }
+        });
+
+        // Update all conversions when base currency changes
+        document.getElementById('baseCurrency').addEventListener('change', () => {
+            STORES.forEach(store => {
+                updateConversion(store.id);
+            });
+        });
+    </script>
+</body>
+</html>
