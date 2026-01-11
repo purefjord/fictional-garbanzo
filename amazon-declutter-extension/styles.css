@@ -1,0 +1,124 @@
+/* Amazon Declutter - Styles */
+
+/* Hidden elements */
+.declutter-hidden {
+  display: none !important;
+}
+
+/* Suspicious review badge */
+.declutter-suspicious-badge {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #92400e;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  border-left: 3px solid #f59e0b;
+  display: inline-block;
+}
+
+.declutter-suspicious-badge:hover {
+  background: linear-gradient(135deg, #fde68a, #fcd34d);
+  cursor: help;
+}
+
+/* Enhanced price per unit visibility */
+.declutter-price-enhanced {
+  background: #e0f2fe !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+  font-weight: 500 !important;
+}
+
+/* Clean up search result spacing after removing ads */
+.s-main-slot > .s-result-item {
+  margin-bottom: 0 !important;
+}
+
+.s-main-slot > .s-result-item + .s-result-item {
+  margin-top: 8px !important;
+}
+
+/* Make genuine product cards slightly more prominent */
+.s-result-item[data-asin]:not([data-declutter-removed]) .a-link-normal.a-text-normal {
+  font-weight: 500;
+}
+
+/* Improve readability of ratings */
+.s-result-item .a-icon-star-small .a-icon-alt,
+.s-result-item .a-icon-star .a-icon-alt {
+  font-size: 0 !important;
+}
+
+/* Add visual separator between products */
+.s-result-item[data-asin]:not(:last-child) {
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 16px !important;
+}
+
+/* Make the actual product title more scannable */
+.s-result-item h2 .a-link-normal {
+  line-height: 1.4 !important;
+}
+
+/* Reduce visual noise from delivery info */
+.s-result-item .a-row.a-size-base.a-color-secondary {
+  opacity: 0.8;
+}
+
+/* Add a subtle indicator that this page has been cleaned */
+body.declutter-active::after {
+  content: '';
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Fix layout issues that can occur after removing sponsored blocks */
+.s-main-slot {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ensure consistent card heights in grid view */
+.s-result-list .s-result-item {
+  min-height: auto !important;
+}
+
+/* Product page improvements */
+#dp-container .declutter-price-enhanced {
+  font-size: 14px !important;
+}
+
+/* Remove excessive whitespace left by removed elements */
+#rightCol > .a-section:empty,
+#leftCol > .a-section:empty {
+  display: none !important;
+}
+
+/* Animation for removal (optional, controlled by JS) */
+@keyframes declutter-fadeout {
+  from {
+    opacity: 1;
+    max-height: 500px;
+  }
+  to {
+    opacity: 0;
+    max-height: 0;
+    padding: 0;
+    margin: 0;
+  }
+}
+
+.declutter-removing {
+  animation: declutter-fadeout 0.3s ease-out forwards;
+  overflow: hidden;
+}
