@@ -1,8 +1,12 @@
 // Amazon Declutter - Make Amazon Actually Usable
 // Removes sponsored garbage, algorithmic slop, and UI clutter
 
+console.log('[Amazon Declutter] Script starting...');
+
 (function() {
   'use strict';
+
+  console.log('[Amazon Declutter] Inside IIFE, initializing...');
 
   // Default settings
   const DEFAULT_SETTINGS = {
@@ -355,13 +359,15 @@
 
   // Main declutter function
   function runDeclutter() {
+    console.log('[Amazon Declutter] runDeclutter() called, enabled:', settings.enabled);
     if (!settings.enabled) return;
 
-    // Core removals that most people will want
-    if (settings.removeSponsored) {
-      removeBySelectors(GARBAGE_SELECTORS.sponsored);
-      findAndRemoveSponsoredProducts();
-    }
+    try {
+      // Core removals that most people will want
+      if (settings.removeSponsored) {
+        removeBySelectors(GARBAGE_SELECTORS.sponsored);
+        findAndRemoveSponsoredProducts();
+      }
 
     if (settings.removeRecommendations) {
       removeBySelectors(GARBAGE_SELECTORS.recommendations);
@@ -413,6 +419,11 @@
     highlightSuspiciousReviews();
     cleanProductPage();
     enhancePrices();
+
+    console.log('[Amazon Declutter] runDeclutter() completed');
+    } catch (e) {
+      console.error('[Amazon Declutter] Error in runDeclutter():', e);
+    }
   }
 
   // Observe for dynamically loaded content
@@ -466,19 +477,28 @@
 
   // Initialize
   function init() {
-    loadSettings();
-    observeChanges();
-    listenForSettingsChanges();
+    console.log('[Amazon Declutter] init() called');
+    try {
+      loadSettings();
+      observeChanges();
+      listenForSettingsChanges();
 
-    // Run again after a short delay for late-loading content
-    setTimeout(runDeclutter, 1000);
-    setTimeout(runDeclutter, 3000);
+      // Run again after a short delay for late-loading content
+      setTimeout(runDeclutter, 1000);
+      setTimeout(runDeclutter, 3000);
+      console.log('[Amazon Declutter] init() completed successfully');
+    } catch (e) {
+      console.error('[Amazon Declutter] Error in init():', e);
+    }
   }
 
   // Start when DOM is ready
+  console.log('[Amazon Declutter] Document readyState:', document.readyState);
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
+    console.log('[Amazon Declutter] Waiting for DOMContentLoaded');
   } else {
+    console.log('[Amazon Declutter] DOM ready, calling init()');
     init();
   }
 })();
