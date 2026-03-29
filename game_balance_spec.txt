@@ -1,0 +1,175 @@
+## Scope and Objectives
+
+This document outlines the scope and objectives for the implementation of game balance adjustments, as informed by the findings and recommendations presented in the "Game Balance Analysis Report." The proposed changes are intended to address identified imbalances and enhance the overall gameplay experience.
+
+The primary objectives of these changes are as follows:
+
+*   **Improve Outpost Viability:** To increase the strategic value and effectiveness of player-controlled outposts, making them a more integral and rewarding component of gameplay.
+*   **Alleviate Resource Constraints:** To mitigate critical resource shortages, with a specific emphasis on easing the limitations imposed by Food (Wheat) availability, thereby enabling more sustained player progression.
+*   **Establish Economic Equity:** To create a more balanced economic playing field between the player and AI entities, particularly in relation to the costs associated with outpost establishment and ongoing upkeep.
+*   **Enhance Strategic Diversity:** To broaden the range of viable tactical and strategic choices available to the player, ensuring that a wider array of approaches can be both feasible and rewarding.
+
+## 2. Player Outpost Adjustments
+
+**2.1. Rationale:**
+Current player outposts are economically prohibitive, significantly limiting their strategic utility, as detailed in the "Game Balance Analysis Report." The objective of these adjustments is to transform outposts into a more viable and appealing strategic option for players.
+
+**2.2. Upfront Construction Costs:**
+The proposed new upfront construction costs for player outposts are as follows:
+*   **Wood:** 70 (down from 100)
+*   **Crew:** 7 (down from 10)
+*   **MP (Military Power/Points):** 35 (down from 50)
+*Justification: This represents an approximate 25-30% reduction in initial investment, aiming to make outposts more accessible during the early to mid-game phases.*
+
+**2.3. Upkeep Costs (Per Turn):**
+The proposed new per-turn upkeep costs for player outposts are:
+*   **Wood:** 3 (down from 5)
+*   **Crew:** 1 (down from 2)
+*   **Gold/Food:** 6 (down from 10)
+*Justification: This substantial ~40% reduction in recurring upkeep is critical for enabling players to establish and maintain a small number of strategic outposts without severely impacting their overall economy.*
+
+**2.4. Outpost Benefits Enhancement (Recommended):**
+
+*   **Storage:**
+    *   Common Resources (Wood, Food): Increase capacity to +700 (up from +500).
+    *   Rare Resources: Increase capacity to +70 (up from +50).
+*   **Local Economic Bonus (New):**
+    *   Benefit: +1 Gold per turn.
+    *   *Justification: This addition represents minor local taxation or trade facilitation, providing a small but consistent economic return on the outpost investment and further enhancing its value.*
+*   **Healing/Repair Rate:**
+    *   Increase unit healing/repair rate to 7% per turn (up from 5%).
+    *   *Justification: A modest increase to improve the efficacy of outposts as forward basing and recovery points.*
+
+*(Note: The existing outpost defensive bonus of +10% and visibility range of 3 hexes will remain unchanged unless specific further testing and analysis indicate a clear need for adjustment.)*
+
+## 3. Resource Economy Rebalancing
+
+**3.1. Rationale:**
+The current resource generation rates, particularly for Food (Wheat), are insufficient to support sustained early-game development and often lead to premature stagnation, as highlighted in the "Game Balance Analysis Report." The following adjustments are intended to provide a more stable economic foundation for players.
+
+**3.2. Base Food (Wheat) Production:**
+*   **New Rate:** Base Food production will be increased to **+12 per turn** (up from the current +5).
+*   **Justification:** This significant increase is crucial to mitigate the prevalent early-game Food deficit. It will better support basic unit and outpost upkeep requirements, reducing the player's forced reliance on unfavorable trade agreements or luck-based foraging merely for economic survival. This new rate aims to strike a balance between alleviating the immediate food crisis and still necessitating strategic resource management.
+
+**3.3. Initial Player Resources:**
+*   **Wood:** Starting Wood will be increased to **275** (up from 200).
+*   **Justification:** This provides players with greater flexibility for their initial strategic decisions, whether that involves pursuing an early technology upgrade, constructing an additional unit, or saving towards a first outpost without an excessive early-game delay. This change complements the proposed reductions in outpost construction costs.
+*   **(Note):** Other initial player resources (Food: 150, Gold: 100, Crew: 30, and initial Ship Storage capacities: Wood 100, Food 50) will remain unchanged in this iteration. This approach is intended to isolate the impact of the primary Food and Wood adjustments. Future iterations of game balance may revisit these other starting resources if further data indicates a need.
+
+**3.4. Trade Ratios (Consideration for Future Iteration):**
+*   A brief note on trade: While not part of this initial implementation specification, the unfavorable trade ratios (e.g., requiring 3 Wood to obtain 1 Food) that were identified in the "Game Balance Analysis Report" should be considered a priority for review in a subsequent balance pass. If the changes outlined above do not adequately improve food security and overall economic flow, adjustments to trade ratios will be the next logical step.
+
+## 4. AI Outpost Parameter Alignment
+
+**4.1. Rationale:**
+The "Game Balance Analysis Report" clearly indicates a significant disparity in outpost construction and upkeep costs between player-controlled and AI-controlled factions. This asymmetry currently grants the AI a substantial and often perceived as unfair advantage in expansion capability. The following changes aim to create a more symmetrical challenge and ensure that outpost expansion is a strategic consideration for all parties.
+
+**4.2. AI Outpost Construction Costs:**
+*   **Recommendation:** AI outpost construction costs should closely mirror the new player costs. A minor discount may be retained to reflect AI character or to allow for difficulty scaling, but dismantled.
+*   **Proposed Values (based on player costs of Wood: 70, Crew: 7, MP: 35):**
+    *   **Wood:** 60-65 (Player: 70)
+    *   **Crew:** 6 (Player: 7)
+    *   **MP:** 30-33 (Player: 35)
+*   **Justification:** Bringing AI construction costs to near-parity with player costs removes a major source of economic imbalance. A small differential of approximately 10-15% allows the AI to maintain a slightly more aggressive or efficient expansion profile, adjustable via difficulty settings, without its expansion appearing 'free' or unearned compared to the player's efforts.
+
+**4.3. AI Outpost Upkeep Costs (Per Turn):**
+*   **Recommendation:** AI outpost upkeep costs must be brought in line with the new player upkeep costs. The existing concept of AI outposts having negligible or zero upkeep should be removed to ensure economic factors govern AI expansion.
+*   **Proposed Values (based on player upkeep of Wood: 3, Crew: 1, Gold/Food: 6):**
+    *   **Wood:** 2-3 (Player: 3)
+    *   **Crew:** 1 (Player: 1)
+    *   **Gold/Food:** 5-6 (Player: 6)
+*   **Justification:** Requiring the AI to pay comparable upkeep for its outposts ensures that its expansionary actions are subject to realistic economic constraints. This makes strategic decisions about outpost placement and quantity meaningful for the AI, mirroring the player's experience. If the AI requires broader economic advantages to remain competitive, these should be provided through explicit difficulty scaling or direct resource bonuses, rather than by fundamentally negating the core costs associated with game systems like outposts.
+
+**4.4. AI Economic Advantages:**
+*   **Note:** It is acknowledged that the AI may require certain economic advantages to provide a consistent and escalating challenge to the player. However, such advantages should be implemented through transparent and understandable mechanisms. Examples include global income bonuses, reduced unit production costs tied to difficulty settings, or other clearly defined modifiers. These are preferable to having core strategic elements like outposts operate under vastly different and opaque economic rules. The aim of this specific change is to make the outpost system itself more fair, predictable, and strategically relevant for both player and AI.
+
+## 5. Introduce Tiered Outposts (Advanced Recommendation)
+
+**5.1. Rationale:**
+A tiered outpost system could significantly enhance strategic flexibility, allowing players to make more nuanced choices regarding expansion and map presence. This approach addresses the current "one size fits all" nature of outposts, enabling less costly investments for basic forward presence versus more substantial, full-featured strategic anchors.
+
+**5.2. Proposed Tiers:**
+
+*   **Tier 1: Forward Camp**
+    *   **Concept:** A rudimentary, low-cost, and low-upkeep structure primarily designed for extending visibility, securing lines of sight, and acting as a safe, forward rally or minor resupply point. It is not intended for significant economic contribution or defense.
+    *   **Estimated Construction Costs:** Wood: 25-35, Crew: 2-3, MP: 10-15.
+    *   **Estimated Upkeep Costs (Per Turn):** Wood: 1, Crew: 0 (or potentially 1 every few turns, representing minimal intermittent staffing), Gold/Food: 1-2.
+    *   **Benefits:**
+        *   Visibility: Standard 3 hexes (alternatively, slightly reduced to 2 hexes to differentiate from higher tiers).
+        *   Storage: Minimal capacity (e.g., +100 common resources, +10 rare resources).
+        *   Healing/Repair Rate: None, or a very minimal rate (e.g., 1-2% per turn).
+        *   Defensive Bonus: None.
+        *   Resource Node Activation: Cannot activate or exploit special resource nodes.
+    *   **Player Action:** Built directly via a distinct build command or UI option, differentiated from the standard outpost.
+
+*   **Tier 2: Fortified Outpost**
+    *   **Concept:** This represents the main strategic outpost, largely aligning with the rebalanced outpost detailed in Section 2 of this document. It is a significant investment for long-term strategic presence, resource exploitation, and area denial.
+    *   **Construction Costs:** As defined in Section 2.2 (Wood: 70, Crew: 7, MP: 35).
+    *   **Upkeep Costs (Per Turn):** As defined in Section 2.3 (Wood: 3, Crew: 1, Gold/Food: 6).
+    *   **Benefits:** As defined in Section 2.4 (including enhanced storage, +1 Gold per turn local economic bonus, 7% healing/repair rate, +10% defensive bonus, and ability to activate special resource nodes).
+    *   **Player Action:** Could be built directly or potentially as an upgrade from an existing Forward Camp (requiring the differential in resources and potentially a construction time).
+
+**5.3. Implementation Considerations:**
+*   **Player Choice Interface:** Thought must be given to how players will choose to build or upgrade outposts (e.g., through separate build menu options for each tier, or an upgrade button/command available on a selected Forward Camp).
+*   **AI Utilization:** Consideration is needed for how the AI would utilize a tiered system. The AI might strategically favor Forward Camps for rapid, low-cost sight expansion and information gathering, while reserving Fortified Outposts for key strategic chokepoints, resource clusters, or defensive positions. AI decision-making logic would need to accommodate this.
+*   **Development Complexity:** It is important to note that introducing a tiered system inherently adds to development workload and balancing complexity. This feature should ideally be considered for implementation after the more straightforward balance changes outlined in Sections 2-4 have been successfully implemented, tested, and validated.
+*   **Visual Differentiation:** Each outpost tier should have a distinct visual model or appearance in-game to ensure players can easily identify them and understand their capabilities at a glance.
+
+**5.4. Strategic Impact:**
+Introducing tiered outposts would allow for more nuanced and granular expansion strategies. Players could establish cheaper Forward Camps for reconnaissance, temporary resource area claims, or to create flexible forward lines without the significant economic commitment of a full Fortified Outpost. This would enable more gradual map control, flexible responses to evolving strategic situations, and potentially reduce the economic burden of early expansion for scouting and presence.
+
+## 6. Gameplay Impact Statement
+
+**6.1. Overall Goal:**
+The collective aim of these proposed changes is to address the key balance concerns identified in the "Game Balance Analysis Report," fostering a more engaging, strategically diverse, and fair gameplay experience for all players.
+
+**6.2. Impact of Player Outpost Adjustments (Section 2):**
+By reducing construction and upkeep costs, and slightly enhancing benefits, player outposts are intended to become genuinely viable strategic assets rather than economic traps. Players should feel empowered to use outposts for territorial control, forward operations, and resource exploitation without automatically crippling their economy. This should encourage more proactive expansion and interaction with the game map.
+
+**6.3. Impact of Resource Economy Rebalancing (Section 3):**
+Increasing base food production and initial wood supplies aims to alleviate early-game resource starvation, particularly the critical food deficit that was identified. This should provide players with more breathing room, reduce reliance on immediate, sometimes unfavorable, trading or luck-based foraging, and allow for smoother progression into mid-game strategies. The goal is to create a challenging but not unduly punitive early game economic environment.
+
+**6.4. Impact of AI Outpost Parameter Alignment (Section 4):**
+Aligning AI outpost construction and upkeep costs more closely with player costs is crucial for perceived fairness and balanced strategic competition. While the AI may still receive other economic advantages (e.g., via difficulty settings or specific AI bonuses), its ability to expand and maintain a presence through outposts should be governed by similar economic principles as those affecting the player. This should lead to more understandable AI expansion patterns and prevent runaway AI dominance achieved solely due to fundamentally cheaper outpost deployment.
+
+**6.5. Impact of Tiered Outposts (Section 5 - If Implemented):**
+Should the advanced recommendation for tiered outposts be implemented, they would significantly enhance strategic depth and player choice. "Forward Camps" would offer low-cost, flexible options for reconnaissance, temporary area denial, and minor map presence, while "Fortified Outposts" would remain significant strategic investments for long-term control and resource exploitation. This flexibility would allow players to tailor their expansion efforts more precisely to specific strategic needs and available resources, promoting a wider variety of viable playstyles and responses to game dynamics.
+
+**6.6. Expected Overall Player Experience:**
+Following these adjustments, players should experience a less frustrating early game, particularly concerning resource availability. They should find more strategic options available regarding outpost utilization and territorial expansion, and face an AI that competes more transparently and fairly in terms of its territorial presence and economic underpinnings for such presence. The game should feel more balanced, allowing for a wider range of successful strategies and rewarding thoughtful long-term planning and adaptation.
+
+## 7. Playtesting and Iteration
+
+**7.1. Necessity of Playtesting:**
+The balance adjustments detailed in this specification are based on the analysis of the "Game Balance Analysis Report" and established game design principles. However, the true impact of these changes on the dynamic and complex system of the game can only be accurately assessed through comprehensive and structured playtesting.
+
+**7.2. Key Areas for Feedback During Playtesting:**
+
+*   **Player Outpost Viability:**
+    *   Are players demonstrably building more outposts compared to previous versions? Do they perceive them as a worthwhile strategic and economic investment?
+    *   Are the adjusted construction and upkeep costs (Section 2.2, 2.3) felt to be appropriate, too high, or too low?
+    *   Are the enhanced outpost benefits (Section 2.4) noticeable, valuable, and contributing to their strategic utility?
+*   **Resource Economy:**
+    *   Has the early-game food shortage been adequately addressed by the new base production rate (Section 3.2)?
+    *   Does the increased starting wood (Section 3.3) provide sufficient initial flexibility without making early choices trivial?
+    *   Is the overall economic progression perceived as smoother and less prone to sudden halts?
+*   **Player vs. AI Balance:**
+    *   Does the AI's expansion behavior (Section 4) now feel more balanced, understandable, and fair in comparison to player constraints?
+    *   Are direct interactions with AI outposts (sieges, raids) more strategically engaging and less a matter of overwhelming economic disparity?
+*   **Strategic Diversity:**
+    *   Are players actively exploring and utilizing a wider range of in-game strategies and unit compositions?
+    *   Has the previously observed over-reliance on specific pathways (e.g., the 'Mobile Forager' archetype) diminished in favor of more varied approaches?
+*   **Overall Playability and Fun Factor:**
+    *   Is the game generally less frustrating, particularly during the critical early stages of establishment?
+    *   Do experienced players still find the game challenging, engaging, and strategically deep?
+    *   Are there any new unintended negative consequences, exploitable mechanics, or emergent balance issues arising from these collective changes?
+
+**7.3. Iterative Approach:**
+
+*   It is strongly recommended to adopt an iterative approach to implementing and testing these balance modifications.
+*   **Phased Implementation (Optional but Recommended):** Consideration should be given to implementing changes in logical phases (e.g., player outpost adjustments first, followed by resource economy changes, then AI parameter alignment). This approach, if development resources permit, can help better isolate the specific effects of each set of changes and simplify the identification of any emergent issues.
+*   **Data Collection:** A robust data collection strategy should be employed, gathering both quantitative metrics (e.g., average number of outposts built by turn X, average resource levels at different game stages, game completion times) and qualitative feedback from a diverse group of playtesters (e.g., surveys, feedback forms, direct interviews).
+*   **Refinement and Adaptation:** The development team must be prepared to make further adjustments and refinements to the parameters outlined in this specification based on concrete playtesting feedback and observed data. Game balance is an ongoing process of tuning and adaptation; these changes represent a significant step towards improvement, but further iterative refinement is fully expected.
+
+**7.4. Tiered Outposts (If Pursued as a Future Development):**
+Should the advanced recommendation for a 'Tiered Outposts' system (detailed in Section 5) be pursued for future development, it will necessitate its own dedicated cycle of detailed design, implementation, and rigorous, focused playtesting. Due to its inherent complexity and the introduction of new game mechanics, it should be treated as a distinct feature development project following the stabilization and assessment of the foundational changes in this document.
